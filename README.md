@@ -67,6 +67,44 @@ Think of it like this:
 
 The `factory` keyword is what lets `fromMap` and `fromEntity` do that conversion/lookup work and still feel like constructors to whoever calls them.
 
+### Why `toMap` isn't a factory
+
+`factory` is a **constructor** keyword. `toMap` isn't a constructor.
+
+Look at what each one returns:
+
+| Member | Returns | Is it a constructor? |
+| --- | --- | --- |
+| `UserDetailsModel(...)` (line 21) | `UserDetailsModel` | yes — generative |
+| `UserDetailsModel.fromMap(map)` (line 35) | `UserDetailsModel` | yes — factory |
+| `UserDetailsModel.fromEntity(e)` (line 28) | `UserDetailsModel` | yes — factory |
+| `toMap()` (line 42) | `Map<String, dynamic>` | no — instance method |
+
+`factory` is a modifier you can only put on a constructor — i.e. something whose job is to produce an instance of the class it lives in. `fromMap` and `fromEntity` both build a `UserDetailsModel`, so they qualify.
+
+`toMap` does the opposite direction: it takes an existing `UserDetailsModel` (`this`) and produces a `Map`. It's not constructing a `UserDetailsModel` at all — it's reading one. That makes it an ordinary instance method.
+
+#### The naming convention that trips people up
+
+In Dart you'll often see this pairing:
+
+```dart
+Foo.fromX(...)   // constructor — builds a Foo from an X
+foo.toX()        // method      — converts this Foo into an X
+```
+
+The `from*` / `to*` symmetry makes them look like a matched set, but they're structurally different:
+- `from*` lives on the **class** (you call it as `UserDetailsModel.fromMap(...)`). It needs a constructor — and since it does lookup/defaulting work, that constructor is a factory.
+- `to*` lives on an **instance** (you call it as `model.toMap()`). It's just a method.
+
+#### Quick test you can apply
+
+Ask: "is the thing being returned an instance of the class this member is declared in?"
+- **Yes** → it's a constructor → it can be `factory` (if it needs logic) or generative (if it just assigns fields).
+- **No** → it's a method → `factory` doesn't apply, and putting it there would be a compile error.
+
+`toMap` returns a `Map`, not a `UserDetailsModel`, so `factory` is not even an option.
+
 ## `fromEntity` — converting Entity → Model
 
 `fromEntity` converts a domain `UserDetailsEntity` into a data-layer `UserDetailsModel` — i.e. it "upgrades" a plain entity into the richer model that knows how to talk to Firestore.

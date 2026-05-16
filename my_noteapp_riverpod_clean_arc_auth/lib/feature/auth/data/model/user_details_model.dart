@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/domain/entities/user_details_entity.dart';
 
 class UserDetailsModel extends UserDetailsEntity {
@@ -14,4 +15,19 @@ class UserDetailsModel extends UserDetailsEntity {
     age: e.age,
     email: e.email,
   );
+
+  factory UserDetailsModel.fromMap(Map<String,dynamic> map) => UserDetailsModel(
+    firstName: map['firstName'] ?? '',
+    lastName: map['lastName'] ?? '',
+    age: map['age'] ?? 0,
+    email: map['email'] ?? ''
+  );
+
+  Map<String, dynamic> toMap() => {
+    'firstName': firstName,
+    'lastName': lastName,
+    'age': age,
+    'email': email,
+    'createdAt': FieldValue.serverTimestamp()
+  };
 }
