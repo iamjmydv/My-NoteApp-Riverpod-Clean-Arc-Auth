@@ -1,17 +1,29 @@
-# my_noteapp_riverpod_clean_arc_auth
+# My-NoteApp-Riverpod-Clean-Arc-Auth
+Flutter Notes App built with Clean Architecture and Riverpod for scalable state management. Features Firebase Authentication for login/signup and Cloud Firestore for real-time note syncing. Designed with maintainability, scalability, and clean code practices in mind.
 
-A new Flutter project.
+## Firebase Packages
 
-## Getting Started
+### `firebase_core` — the foundation/bootstrap package
+- Initializes the Firebase SDK (`Firebase.initializeApp()`)
+- Manages the connection to your Firebase project (using `firebase_options.dart`)
+- Required by every other Firebase plugin — but it doesn't include any of their features
+- Think of it as the "engine" — it doesn't do auth or database work itself
 
-This project is a starting point for a Flutter application.
+### `firebase_auth` — authentication only
+- Sign in / sign up (email, Google, Apple, anonymous, phone, etc.)
+- User session management, password reset, email verification
+- `FirebaseAuth.instance`, `User`, `UserCredential` classes
 
-A few resources to get you started if this is your first Flutter project:
+### `cloud_firestore` — the NoSQL database only
+- Reading/writing documents and collections
+- Real-time listeners (`snapshots()`)
+- Queries, transactions, batched writes
+- `FirebaseFirestore.instance`, `DocumentSnapshot`, `QuerySnapshot` classes
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### Other Firebase packages might add later (each is separate)
+- `firebase_storage` — file/image uploads
+- `firebase_messaging` — push notifications
+- `cloud_functions` — call backend functions
+- `firebase_analytics`, `firebase_crashlytics`, etc.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Each one is its own dependency — that's the modular pattern Firebase uses.

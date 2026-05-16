@@ -20,7 +20,7 @@ Flutter Notes App built with Clean Architecture and Riverpod for scalable state 
 - Queries, transactions, batched writes
 - `FirebaseFirestore.instance`, `DocumentSnapshot`, `QuerySnapshot` classes
 
-### Other Firebase packages you might add later (each is separate)
+### Other Firebase packages might add later (each is separate)
 - `firebase_storage` — file/image uploads
 - `firebase_messaging` — push notifications
 - `cloud_functions` — call backend functions
