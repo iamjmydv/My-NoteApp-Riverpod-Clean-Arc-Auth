@@ -66,3 +66,35 @@ Think of it like this:
 - `UserDetailsModel.fromEntity(e)` → "convert this entity into a model."
 
 The `factory` keyword is what lets `fromMap` and `fromEntity` do that conversion/lookup work and still feel like constructors to whoever calls them.
+
+## `fromEntity` — converting Entity → Model
+
+`fromEntity` converts a domain `UserDetailsEntity` into a data-layer `UserDetailsModel` — i.e. it "upgrades" a plain entity into the richer model that knows how to talk to Firestore.
+
+### Class hierarchy
+- [user_details_entity.dart:14](my_noteapp_riverpod_clean_arc_auth/lib/feature/auth/domain/entity/user_details_entity.dart#L14) — pure Dart, no Firestore awareness.
+- [user_details_model.dart:20](my_noteapp_riverpod_clean_arc_auth/lib/feature/auth/data/model/user_details_model.dart#L20) — extends `UserDetailsEntity` and adds `toMap` / `fromMap`.
+
+If some code in the domain or presentation layer only has a `UserDetailsEntity` in hand and needs to write it to Firestore, it can't call `toMap()` on the entity (the entity doesn't have that method). So you'd promote it first:
+
+```dart
+final entity = UserDetailsEntity(firstName: 'Jam', lastName: 'D', age: 25, email: 'a@b.com');
+final model  = UserDetailsModel.fromEntity(entity); // now has toMap()
+await firestore.collection('users').doc(uid).set(model.toMap());
+```
+
+That's the intended use case.
+
+### Where it's actually used
+Nowhere — currently. The only hits for `fromEntity` in `lib/` are:
+- [user_details_model.dart:9](my_noteapp_riverpod_clean_arc_auth/lib/feature/auth/data/model/user_details_model.dart#L9) — the comment describing it.
+- [user_details_model.dart:28](my_noteapp_riverpod_clean_arc_auth/lib/feature/auth/data/model/user_details_model.dart#L28) — the definition itself.
+
+No call sites exist. It was written defensively for "in case the data layer ever receives a bare entity," but in the current flow the model is always built directly via `UserDetailsModel(...)` (in `auth_remote_datasource.dart`) or via `fromMap` when reading from Firestore — never via `fromEntity`.
+
+### What to do with it
+Two reasonable options:
+1. **Delete it.** It's currently dead code. If a future need appears, you can add it back in two lines.
+2. **Keep it as a hook.** It's cheap to have, and the moment the domain layer needs to push an entity into Firestore (e.g. an "update profile" flow that starts from an entity), it'll save you writing the conversion inline.
+
+For a learning/portfolio project, keeping it is fine — the comment at the top of the file already documents its purpose. For a strict codebase, it'd get flagged as unused.
