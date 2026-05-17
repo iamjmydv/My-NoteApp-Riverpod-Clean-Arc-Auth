@@ -136,3 +136,69 @@ Two reasonable options:
 2. **Keep it as a hook.** It's cheap to have, and the moment the domain layer needs to push an entity into Firestore (e.g. an "update profile" flow that starts from an entity), it'll save you writing the conversion inline.
 
 For a learning/portfolio project, keeping it is fine — the comment at the top of the file already documents its purpose. For a strict codebase, it'd get flagged as unused.
+
+## `AuthRemoteDatasource` — the data-layer Firebase gateway
+
+This is the only place in the app that talks directly to `FirebaseAuth` and `FirebaseFirestore`. Everything above it (repository → usecase → presentation) goes through the abstract `AuthRemoteDatasource` interface and never imports the Firebase SDKs.
+
+### Abstract interface vs implementation
+- [auth_remote_datasource.dart:8](lib/feature/auth/data/datasources/auth_remote_datasource.dart#L8) — `AuthRemoteDatasource` abstract class: declares `signUp` and `login`, both returning `Future<UserDetailsModel>`.
+- [auth_remote_datasource.dart:13](lib/feature/auth/data/datasources/auth_remote_datasource.dart#L13) — `AuthRemoteDatasourceImpl`: holds `FirebaseAuth` and `FirebaseFirestore` (both injected via constructor) and implements the contract.
+
+Why split them? So the repository can depend on the **interface**, and tests can swap in a fake implementation without booting Firebase.
+
+### Constructor injection
+```dart
+AuthRemoteDatasourceImpl({
+  required this.auth,
+  required this.firestore,
+});
+```
+- `auth` and `firestore` come from outside (Riverpod providers).
+- The class doesn't call `FirebaseAuth.instance` or `FirebaseFirestore.instance` itself — that would hard-wire it to the global singletons and make it untestable.
+
+### `signUp` flow
+[auth_remote_datasource.dart:25](lib/feature/auth/data/datasources/auth_remote_datasource.dart#L25) does three things in order:
+
+1. **Create the auth user** — `auth.createUserWithEmailAndPassword(...)` returns a `UserCredential` containing the new `uid`.
+2. **Build the profile model** — `UserDetailsModel(...)` (generative constructor) wraps the fields that don't live in Firebase Auth (firstName, lastName, age).
+3. **Persist the profile** — `firestore.collection('users').doc(uid).set(profile.toMap())` writes the model as a document keyed by the auth uid.
+
+This is exactly where `toMap()` from the [Regular vs Factory constructor](#regular-vs-factory-constructor) section earns its keep — Firestore's `.set(...)` takes a `Map<String, dynamic>`, not a `UserDetailsModel`.
+
+### Why the collection name is a private field
+```dart
+final String _collection = 'users';
+```
+- `_` makes it library-private (no leak to consumers).
+- `final` so it can't be reassigned.
+- Centralizing the string here means a rename never gets out of sync between `signUp` and a future `login` / `getProfile`.
+
+### Error handling — three layers, narrow → wide
+[auth_remote_datasource.dart:45-51](lib/feature/auth/data/datasources/auth_remote_datasource.dart#L45-L51):
+
+| Catch | Source | Wrapped as |
+| --- | --- | --- |
+| `on FirebaseAuthException` | Auth SDK (bad password, email in use, etc.) | `ServerFailure(_authErrorMessage(e))` |
+| `on FirebaseException` | Firestore SDK (permission denied, offline, etc.) | `ServerFailure(e.message ?? 'Firestore error (${e.code})')` |
+| `catch (e)` | Anything else (programmer error, plugin bug) | `UnknownFailure(e.toString())` |
+
+Order matters: `FirebaseAuthException` extends `FirebaseException`, so the narrower auth catch **must** come first or every auth error would be swallowed by the generic Firestore branch.
+
+All three branches convert raw SDK exceptions into the project's own `Failure` types (defined in `core/error/failure.dart`). The repository above never sees a `FirebaseAuthException` — it only sees `Failure`s, which keeps Firebase out of the domain layer.
+
+### `_authErrorMessage` — translating codes to UI copy
+[auth_remote_datasource.dart:60](lib/feature/auth/data/datasources/auth_remote_datasource.dart#L60) switches on `e.code` and returns a human-friendly string. Two things worth noting:
+
+- **`user-not-found` and `wrong-password` collapse to the same message** ("Incorrect email or password"). That's deliberate — telling the user *which* of the two was wrong leaks account-existence info to attackers.
+- **Default branch falls back to `e.message`** rather than a generic string, so unmapped codes still surface something useful while still including the code.
+
+### `login` — currently a stub
+[auth_remote_datasource.dart:55](lib/feature/auth/data/datasources/auth_remote_datasource.dart#L55) throws `UnimplementedError()`. The signature is in place so the repository and usecase can already wire it up; the body just needs to be filled in (probably `signInWithEmailAndPassword` + a Firestore read to rehydrate the profile).
+
+### Mental model
+- `AuthRemoteDatasource` = "the thin layer that knows Firebase exists."
+- Above it: pure Dart, no SDK imports, only `UserDetailsModel` / `UserDetailsEntity` / `Failure`.
+- Below it: the Firebase plugins.
+
+If you ever swap Firebase for Supabase, this is the file that gets rewritten — and nothing else has to change.
