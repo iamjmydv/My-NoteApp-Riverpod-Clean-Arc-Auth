@@ -12,6 +12,7 @@ class LoginUseCaseParams {
 class LoginUserUseCase implements UseCaseWithParams<UserDetailsEntity, LoginUseCaseParams> {
   
   AuthRepository repository;
+  
   LoginUserUseCase(this.repository);
 
   @override
