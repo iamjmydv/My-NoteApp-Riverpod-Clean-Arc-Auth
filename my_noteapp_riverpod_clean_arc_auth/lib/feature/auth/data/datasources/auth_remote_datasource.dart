@@ -14,10 +14,7 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
   FirebaseAuth auth;
   FirebaseFirestore firestore;
 
-  AuthRemoteDatasourceImpl({
-    required this.auth, 
-    required this.firestore
-  });
+  AuthRemoteDatasourceImpl({required this.auth, required this.firestore});
 
   final String _collection = 'users';
 
@@ -52,8 +49,31 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
   }
 
   @override
-  Future<UserDetailsModel> login(LoginUseCaseParams params) {
-    throw UnimplementedError();
+  Future<UserDetailsModel> login(LoginUseCaseParams params) async {
+    try {
+      final credential = await auth.signInWithEmailAndPassword(
+        email: params.email,
+        password: params.password,
+      );
+
+      final snapshot = await firestore
+          .collection(_collection)
+          .doc(credential.user!.uid)
+          .get();
+
+      if (!snapshot.exists) {
+        throw const UnknownFailure('Profile not found for this account!');
+      }
+      return UserDetailsModel.fromMap(snapshot.data()!);
+    } on FirebaseAuthException catch (e) {
+      throw ServerFailure(_authErrorMessage(e));
+    } on FirebaseException catch (e) {
+      throw ServerFailure(e.message ?? 'Firestore error (${e.code})');
+    } on Failure {
+      rethrow;
+    } catch (e) {
+      throw UnknownFailure(e.toString());
+    }
   }
 
   /// Turn Firebase Auth error codes into user-friendly messages.

@@ -202,3 +202,106 @@ All three branches convert raw SDK exceptions into the project's own `Failure` t
 - Below it: the Firebase plugins.
 
 If you ever swap Firebase for Supabase, this is the file that gets rewritten — and nothing else has to change.
+
+## `AuthRepository` — the domain ↔ data seam
+
+The repository sits between the **usecases** (domain) and the **datasource** (data). The domain declares the contract; the data layer implements it. Anyone above this line talks to `AuthRepository`; nothing above it knows an `AuthRemoteDatasource` exists.
+
+### The interface — domain side
+- [auth_repository.dart:5](lib/feature/auth/domain/repository/auth_repository.dart#L5) — abstract `AuthRepository`. Pure Dart, returns `UserDetailsEntity`, not `UserDetailsModel`. The domain has no awareness that a "model" type exists.
+
+### The implementation — data side
+- [auth_repository_impl.dart:7](lib/feature/auth/data/repository/auth_repository_impl.dart#L7) — `AuthRepositoryImpl extends AuthRepository`. Holds an `AuthRemoteDatasource` (injected) and forwards calls one-to-one.
+
+Notice the return types:
+```dart
+// interface (domain)   Future<UserDetailsEntity>
+// impl     (data)      Future<UserDetailsModel>
+```
+The impl returns the richer `UserDetailsModel`, which silently upcasts to `UserDetailsEntity` at the seam because `UserDetailsModel extends UserDetailsEntity`. Callers see only the entity — `toMap()` / `fromMap()` stay invisible to anything above this line.
+
+### Why a thin pass-through?
+Right now `signUp` and `login` just call straight through to the datasource. It looks redundant. The repository earns its keep the moment you need to:
+- combine multiple sources (remote + local cache),
+- merge or transform failures,
+- add retry / throttle / timeout policy,
+- gate features behind a remote-config flag.
+
+That logic belongs **here** — not in the datasource (too low) and not in the usecase (too high). Keeping the seam in place even when it does nothing means none of that work needs a refactor when it finally arrives.
+
+## Use cases — one class per action
+
+A usecase is a single executable user intention (sign up, log in, fetch profile, …). Each one is its own class, holding only the repository it needs and exposing a single `call(...)` method.
+
+### The base contracts — [core/usecase/usecase.dart](lib/core/usecase/usecase.dart)
+```dart
+abstract class UseCaseWithParams<T, P> { Future<T> call(P params); }
+abstract class UseCase<T>              { Future<T> call(); }
+class NoParams { const NoParams(); }
+```
+- `UseCase<T>` — for parameter-less actions (e.g. a future `LogoutUseCase`).
+- `UseCaseWithParams<T, P>` — everything else; `P` is the params object.
+- `NoParams` — sentinel for the rare case you want `UseCaseWithParams` semantics without real params.
+
+The base class is intentionally minimal. It doesn't try to enforce error handling, logging, or transactions — that would force every usecase to opt into a framework. Subclasses do whatever they need inside `call`.
+
+### `SignUpUserUseCase`
+- [sign_up_user_usecase.dart:5](lib/feature/auth/domain/usecases/sign_up_user_usecase.dart#L5) — `SignUpUseCaseParams` (firstName, lastName, age, email, password).
+- [sign_up_user_usecase.dart:21](lib/feature/auth/domain/usecases/sign_up_user_usecase.dart#L21) — `SignUpUserUseCase implements UseCaseWithParams<UserDetailsEntity, SignUpUseCaseParams>`.
+- `call(params)` → `repository.signUp(params)`.
+
+### `LoginUserUseCase`
+- [login_user_usecase.dart:5](lib/feature/auth/domain/usecases/login_user_usecase.dart#L5) — `LoginUseCaseParams` (email, password).
+- [login_user_usecase.dart:12](lib/feature/auth/domain/usecases/login_user_usecase.dart#L12) — `LoginUserUseCase implements UseCaseWithParams<UserDetailsEntity, LoginUseCaseParams>`.
+- `call(params)` → `repository.login(params)`.
+
+### Why one class per action?
+A repository can grow to a dozen methods. A presentation widget that only needs `signUp` shouldn't have to depend on the entire repository surface — it depends on `SignUpUserUseCase`, gets only what it needs, and is trivial to fake in a widget test.
+
+It also gives every action a natural home for cross-cutting work: input validation, analytics, throttling — attach it to the usecase and the rest of the stack stays clean.
+
+### Params objects vs positional arguments
+`SignUpUseCaseParams` exists instead of `call(firstName, lastName, age, email, password)` for two reasons:
+- **Named, type-safe arguments** — at the call site you write `SignUpUseCaseParams(email: ..., password: ...)`, not a five-positional-string call where any two strings could be swapped without the compiler noticing.
+- **Stable signature** — adding a new field (e.g. `referralCode`) is a non-breaking change to `call`; only the params constructor grows.
+
+## `Failure` — typed errors at the layer boundary
+
+[core/error/failure.dart](lib/core/error/failure.dart) defines the only error type that crosses layers:
+
+```dart
+sealed class Failure implements Exception {
+  final String message;
+  const Failure(this.message);
+}
+
+class ServerFailure  extends Failure { ... }
+class NetworkFailure extends Failure { ... }
+class UnknownFailure extends Failure { ... }
+```
+
+### Why `sealed`?
+A `sealed` class can only be extended within the same library. The compiler then knows every possible subtype, which means:
+- A `switch (failure)` in the presentation layer becomes **exhaustive** — Dart warns if a new `Failure` subtype is added without a matching case.
+- No third-party package can sneak in a fourth `Failure` subclass that the UI silently ignores.
+
+### Why it `implements Exception`
+So the datasource can `throw` a `Failure` directly instead of needing a separate exception-to-failure translator. The `try/catch` in [auth_remote_datasource.dart:45-51](lib/feature/auth/data/datasources/auth_remote_datasource.dart#L45-L51) already does the work — it converts every raw SDK error into one of the three `Failure` subtypes before re-throwing.
+
+### How it flows through the stack
+```
+FirebaseAuthException ─┐
+FirebaseException     ─┼─→ Failure ─→ Failure ─→ Failure ─→ catch & render
+other Exception       ─┘   (data)     (repo)     (usecase)    (presentation)
+       ↑
+   raw SDK errors die here, in the datasource
+```
+
+Everything above the datasource sees `Failure` — never `FirebaseAuthException`. That's what keeps the Firebase SDKs out of the domain layer.
+
+### Why three subtypes (and not more)
+- `ServerFailure` — the backend responded with an error (auth rejected the credentials, Firestore returned a permission error).
+- `NetworkFailure` — the request never made it (offline, DNS, timeout). Reserved for connectivity-class errors so the UI can offer a retry instead of an "incorrect password"-style message.
+- `UnknownFailure` — escape hatch for anything else; the `e.toString()` payload is for the developer, not the user.
+
+Keep the set small. The point of a sealed type is exhaustive handling — every new subtype is a new `case` in every `switch` across the presentation layer.
