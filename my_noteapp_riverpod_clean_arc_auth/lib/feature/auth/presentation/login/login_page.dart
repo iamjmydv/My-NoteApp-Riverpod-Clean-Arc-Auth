@@ -1,3 +1,1 @@
-class LoginController {
-  
-} 
+class LoginPage {}
