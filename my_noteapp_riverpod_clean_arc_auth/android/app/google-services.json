@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "804215150885",
+    "project_id": "my-noteappriverpodcleanarcauth",
+    "storage_bucket": "my-noteappriverpodcleanarcauth.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:804215150885:android:be5f76d7a9046b6976e2cc",
+        "android_client_info": {
+          "package_name": "com.example.my_noteapp_riverpod_clean_arc_auth"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJjyIt4Xuhfg1_r7cN_pzQSKP0pKAwfGA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
