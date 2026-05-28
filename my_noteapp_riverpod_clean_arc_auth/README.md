@@ -351,3 +351,55 @@ Without `guard`, a thrown `Failure` from the use case would bubble up and crash 
 - Line 32 uses `.guard` because `loginUserUseCase.call(params)` is the risky boundary — it can throw a `Failure`, and you want that failure converted into `LoginFailedState` rather than crashing the controller.
 
 That's why they appear back-to-back: `.data` paints the "we're working" state instantly, then `.guard` does the actual work safely.
+
+## Alternate ways to write `firebaseAuthProvider`
+
+The current form in [auth_providers.dart:5-7](lib/core/providers/auth_providers.dart#L5-L7) is:
+
+```dart
+final firebaseAuthProvider = Provider<FirebaseAuth>(
+  (ref) => FirebaseAuth.instance
+);
+```
+
+All of the following are equivalent — pick the one that matches your style.
+
+### 1. Single-line arrow form
+Most compact; same semantics.
+```dart
+final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instance);
+```
+
+### 2. Block body form
+Useful if you later need to add logic (logging, conditional config, etc.) before returning the instance.
+```dart
+final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
+  return FirebaseAuth.instance;
+});
+```
+
+### 3. Without the explicit generic type
+Dart infers `Provider<FirebaseAuth>` from the return type of `FirebaseAuth.instance`. Slightly less self-documenting but functionally identical.
+```dart
+final firebaseAuthProvider = Provider((ref) => FirebaseAuth.instance);
+```
+
+### 4. Riverpod code-generation style (`@riverpod`)
+The modern recommended approach if the project adopts `riverpod_generator`. Requires `riverpod_annotation`, `riverpod_generator`, and `build_runner`, plus running `dart run build_runner build` (or `--watch`).
+
+```dart
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'auth_providers.g.dart';
+
+@Riverpod(keepAlive: true)
+FirebaseAuth firebaseAuth(Ref ref) => FirebaseAuth.instance;
+```
+
+The generator emits a `firebaseAuthProvider` you consume exactly like the manual form. `keepAlive: true` mirrors a regular `Provider` (which is kept alive by default); without it the generated provider behaves like `.autoDispose`.
+
+### Which to use?
+- **Option 1 or 3** — smallest, no setup, perfect for a SDK-singleton provider like this one.
+- **Option 2** — switch to it the moment the body grows past one expression.
+- **Option 4** — only worth adopting if you plan to convert the rest of the providers in the project too; mixing generated and manual providers in one file is fine but adds cognitive overhead.
