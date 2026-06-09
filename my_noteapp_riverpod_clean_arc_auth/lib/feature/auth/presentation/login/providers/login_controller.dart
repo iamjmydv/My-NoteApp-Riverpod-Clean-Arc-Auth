@@ -16,5 +16,18 @@ class LoginController extends AsyncNotifier<LoginState> {
       final user = await ref.read(loginUserUseCaseProvider).call(params);
       return LoginSuccessState(user);
     });
+
+    state = result.when(
+      data: AsyncValue.data,
+      loading: () => const AsyncValue.data(LoginLoadingState()),
+      error: (e, _) => AsyncValue.data(LoginFailedState(e.toString())),
+    );
   }
+
+  void reset() => state = const AsyncValue.data(LoginInitialState());
 }
+
+final loginControllerProvider =
+    AsyncNotifierProvider.autoDispose<LoginController, LoginState>(
+  LoginController.new,
+);
