@@ -305,3 +305,101 @@ Everything above the datasource sees `Failure` — never `FirebaseAuthException`
 - `UnknownFailure` — escape hatch for anything else; the `e.toString()` payload is for the developer, not the user.
 
 Keep the set small. The point of a sealed type is exhaustive handling — every new subtype is a new `case` in every `switch` across the presentation layer.
+
+## `AsyncValue.data` vs `AsyncValue.guard`
+
+They do completely different jobs — they just both produce an `AsyncValue`.
+
+### `AsyncValue.data(value)` — a constructor
+A synchronous wrapper. You already have a value in hand and you're boxing it into the `AsyncValue` shape so you can assign it to state.
+
+```dart
+state = const AsyncValue.data(LoginLoadingState()); // line 30
+```
+
+Siblings: `AsyncValue.loading()`, `AsyncValue.error(e, st)`. None of them run any code — they just construct.
+
+**Use when:** you're manually setting state to a value you already computed (or a sentinel like your `LoginLoadingState`).
+
+### `AsyncValue.guard(() async {...})` — a runner
+Executes an async function and catches anything it throws, returning:
+- `AsyncValue.data(result)` if it completed, or
+- `AsyncValue.error(e, stackTrace)` if it threw.
+
+```dart
+final result = await AsyncValue.guard<LoginState>(() async {
+  final user = await ref.read(loginUserUseCaseProvider).call(params);
+  return LoginSuccessState(user);
+});
+```
+
+Without `guard`, a thrown `Failure` from the use case would bubble up and crash (or leave state stale). With `guard`, the throw is captured as an `AsyncValue.error`, which is why the next block needs `result.when(... error: ...)` to translate it into your `LoginFailedState`.
+
+**Use when:** you're running async work that might throw and you want the failure modeled as state instead of an uncaught exception.
+
+### Quick mental model
+
+| | `AsyncValue.data` | `AsyncValue.guard` |
+| --- | --- | --- |
+| Kind | constructor | function runner |
+| Sync/async | sync | async (returns `Future<AsyncValue>`) |
+| Catches errors? | no | yes |
+| Typical use | set known state | wrap a use-case call |
+
+### In your file specifically
+- Line 30 uses `.data` because you're flipping into a known loading state — there's nothing to await, nothing to catch.
+- Line 32 uses `.guard` because `loginUserUseCase.call(params)` is the risky boundary — it can throw a `Failure`, and you want that failure converted into `LoginFailedState` rather than crashing the controller.
+
+That's why they appear back-to-back: `.data` paints the "we're working" state instantly, then `.guard` does the actual work safely.
+
+## Alternate ways to write `firebaseAuthProvider`
+
+The current form in [auth_providers.dart:5-7](lib/core/providers/auth_providers.dart#L5-L7) is:
+
+```dart
+final firebaseAuthProvider = Provider<FirebaseAuth>(
+  (ref) => FirebaseAuth.instance
+);
+```
+
+All of the following are equivalent — pick the one that matches your style.
+
+### 1. Single-line arrow form
+Most compact; same semantics.
+```dart
+final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instance);
+```
+
+### 2. Block body form
+Useful if you later need to add logic (logging, conditional config, etc.) before returning the instance.
+```dart
+final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
+  return FirebaseAuth.instance;
+});
+```
+
+### 3. Without the explicit generic type
+Dart infers `Provider<FirebaseAuth>` from the return type of `FirebaseAuth.instance`. Slightly less self-documenting but functionally identical.
+```dart
+final firebaseAuthProvider = Provider((ref) => FirebaseAuth.instance);
+```
+
+### 4. Riverpod code-generation style (`@riverpod`)
+The modern recommended approach if the project adopts `riverpod_generator`. Requires `riverpod_annotation`, `riverpod_generator`, and `build_runner`, plus running `dart run build_runner build` (or `--watch`).
+
+```dart
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'auth_providers.g.dart';
+
+@Riverpod(keepAlive: true)
+FirebaseAuth firebaseAuth(Ref ref) => FirebaseAuth.instance;
+```
+
+The generator emits a `firebaseAuthProvider` you consume exactly like the manual form. `keepAlive: true` mirrors a regular `Provider` (which is kept alive by default); without it the generated provider behaves like `.autoDispose`.
+
+### Which to use?
+- **Option 1 or 3** — smallest, no setup, perfect for a SDK-singleton provider like this one.
+- **Option 2** — switch to it the moment the body grows past one expression.
+- **Option 4** — only worth adopting if you plan to convert the rest of the providers in the project too; mixing generated and manual providers in one file is fine but adds cognitive overhead.
