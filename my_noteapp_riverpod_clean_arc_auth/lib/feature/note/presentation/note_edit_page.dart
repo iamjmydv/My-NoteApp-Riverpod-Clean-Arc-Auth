@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/auth_providers.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/utils/relative_time.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/note/domain/entities/note_entity.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/note/domain/usecases/create_note_usecase.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/note/domain/usecases/delete_note_usecase.dart';
@@ -92,6 +94,8 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete note?'),
         content: const Text('This action cannot be undone.'),
         actions: [
@@ -99,10 +103,11 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Cancel'),
           ),
-          FilledButton.tonal(
+          FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: FilledButton.styleFrom(
-              foregroundColor: Colors.red.shade700,
+              backgroundColor: AppColors.error,
+              minimumSize: const Size(88, 44),
             ),
             child: const Text('Delete'),
           ),
@@ -119,6 +124,8 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     ref.listen<AsyncValue<NoteEditState>>(noteEditControllerProvider,
         (prev, next) {
       switch (next.value) {
@@ -127,8 +134,7 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                backgroundColor: Colors.green.shade600,
-                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.success,
                 content: Text(
                   wasCreated ? 'Note created' : 'Note updated',
                   style: const TextStyle(color: Colors.white),
@@ -142,8 +148,7 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                backgroundColor: Colors.red.shade600,
-                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.error,
                 content: const Text(
                   'Note deleted',
                   style: TextStyle(color: Colors.white),
@@ -157,8 +162,7 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                backgroundColor: Colors.red.shade700,
-                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.error,
                 content: Text(
                   message,
                   style: const TextStyle(color: Colors.white),
@@ -172,24 +176,45 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
 
     final state = ref.watch(noteEditControllerProvider).value;
     final isLoading = state is NoteEditLoadingState;
+    final edited = relativeTime(widget.note?.updatedAt ?? widget.note?.createdAt);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Note' : 'New Note'),
+        titleSpacing: 0,
         actions: [
           if (widget.isEditing)
             IconButton(
               tooltip: 'Delete',
-              icon: const Icon(Icons.delete_outline),
+              icon: const Icon(Icons.delete_outline, color: AppColors.error),
               onPressed: isLoading ? null : _onDelete,
             ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
+            child: FilledButton(
+              onPressed: isLoading ? null : _onSave,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(72, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                textStyle: theme.textTheme.titleSmall
+                    ?.copyWith(color: Colors.white),
+              ),
+              child: isLoading
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(widget.isEditing ? 'Save' : 'Create'),
+            ),
+          ),
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -198,39 +223,45 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.next,
                   enabled: !isLoading,
-                  decoration: const InputDecoration(
-                    labelText: 'Title',
-                    border: OutlineInputBorder(),
+                  style: theme.textTheme.headlineSmall,
+                  maxLines: null,
+                  decoration: InputDecoration(
+                    filled: false,
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    hintText: 'Title',
+                    hintStyle: theme.textTheme.headlineSmall
+                        ?.copyWith(color: AppColors.inkFaint),
                   ),
                   validator: (v) => _validateRequired(v, 'Title'),
                 ),
+                if (widget.isEditing && edited.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Edited $edited', style: theme.textTheme.bodySmall),
+                ],
                 const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _contentController,
                   textCapitalization: TextCapitalization.sentences,
                   enabled: !isLoading,
-                  minLines: 6,
-                  maxLines: 14,
-                  decoration: const InputDecoration(
-                    labelText: 'Content',
-                    alignLabelWithHint: true,
-                    border: OutlineInputBorder(),
+                  minLines: 8,
+                  maxLines: null,
+                  style: theme.textTheme.bodyLarge?.copyWith(height: 1.6),
+                  decoration: InputDecoration(
+                    filled: false,
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    hintText: 'Start writing…',
+                    hintStyle: theme.textTheme.bodyLarge
+                        ?.copyWith(color: AppColors.inkFaint),
                   ),
                   validator: (v) => _validateRequired(v, 'Content'),
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: isLoading ? null : _onSave,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(widget.isEditing ? 'Save changes' : 'Create'),
-                  ),
                 ),
               ],
             ),

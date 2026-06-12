@@ -8,6 +8,8 @@ import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/presentation/sig
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/note/domain/entities/note_entity.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/note/presentation/homepage_list_page.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/note/presentation/note_edit_page.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/domain/entities/user_details_entity.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/presentation/edit_profile_page.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/presentation/user_profile_page.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
@@ -44,6 +46,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.userProfile,
         name: 'userProfile',
         builder: (context, state) => const UserProfilePage(),
+      ),
+      GoRoute(
+        path: AppRoutes.editProfile,
+        name: 'editProfile',
+        builder: (context, state) =>
+            EditProfilePage(profile: state.extra as UserDetailsEntity?),
       ),
     ],
   );

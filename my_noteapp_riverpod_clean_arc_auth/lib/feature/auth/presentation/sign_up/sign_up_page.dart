@@ -1,8 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_routes.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/domain/usecases/sign_up_user_usecase.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/presentation/sign_up/providers/sign_up_controller.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/presentation/sign_up/providers/sign_up_state.dart';
@@ -21,9 +23,16 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
   final _ageController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _loginRecognizer = TapGestureRecognizer();
   bool _obscurePassword = true;
 
   static final _emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$');
+
+  @override
+  void initState() {
+    super.initState();
+    _loginRecognizer.onTap = _goToLogin;
+  }
 
   @override
   void dispose() {
@@ -32,6 +41,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     _ageController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _loginRecognizer.dispose();
     super.dispose();
   }
 
@@ -101,8 +111,18 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     _passwordController.clear();
   }
 
+  void _goToLogin() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.login);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     ref.listen<AsyncValue<SignUpState>>(signUpControllerProvider, (prev, next) {
       switch (next.value) {
         case SignUpSuccessState(:final details):
@@ -110,8 +130,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                backgroundColor: Colors.green.shade600,
-                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.success,
                 content: Row(
                   children: [
                     const Icon(Icons.check_circle, color: Colors.white),
@@ -134,8 +153,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                backgroundColor: Colors.red.shade700,
-                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.error,
                 content: Text(
                   'Sign up failed: $message',
                   style: const TextStyle(color: Colors.white),
@@ -151,106 +169,146 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     final isLoading = state is SignUpLoadingState;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign Up')),
+      appBar: AppBar(
+        leading: BackButton(onPressed: _goToLogin),
+      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextFormField(
-                  controller: _firstNameController,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  enabled: !isLoading,
-                  decoration: const InputDecoration(
-                    labelText: 'First name',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) => _validateRequired(v, 'First name'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _lastNameController,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  enabled: !isLoading,
-                  decoration: const InputDecoration(
-                    labelText: 'Last name',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) => _validateRequired(v, 'Last name'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _ageController,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  enabled: !isLoading,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(3),
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: 'Age',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: _validateAge,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  enabled: !isLoading,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: _validateEmail,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.done,
-                  enabled: !isLoading,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                      ),
-                      onPressed: isLoading
-                          ? null
-                          : () => setState(
-                                () => _obscurePassword = !_obscurePassword,
-                              ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Create account', style: theme.textTheme.displaySmall),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Start capturing your ideas',
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(color: AppColors.inkSub),
                     ),
-                  ),
-                  validator: _validatePassword,
-                  onFieldSubmitted: (_) => _onSubmit(),
+                    const SizedBox(height: 24),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _firstNameController,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            enabled: !isLoading,
+                            decoration:
+                                const InputDecoration(labelText: 'First name'),
+                            validator: (v) =>
+                                _validateRequired(v, 'First name'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _lastNameController,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            enabled: !isLoading,
+                            decoration:
+                                const InputDecoration(labelText: 'Last name'),
+                            validator: (v) =>
+                                _validateRequired(v, 'Last name'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _ageController,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      enabled: !isLoading,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
+                      decoration: const InputDecoration(labelText: 'Age'),
+                      validator: _validateAge,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      enabled: !isLoading,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        hintText: 'you@example.com',
+                      ),
+                      validator: _validateEmail,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.done,
+                      enabled: !isLoading,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        hintText: 'at least 6 characters',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: AppColors.inkSub,
+                          ),
+                          onPressed: isLoading
+                              ? null
+                              : () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
+                        ),
+                      ),
+                      validator: _validatePassword,
+                      onFieldSubmitted: (_) => _onSubmit(),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: isLoading ? null : _onSubmit,
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Create account'),
+                    ),
+                    const SizedBox(height: 20),
+                    Center(
+                      child: Text.rich(
+                        TextSpan(
+                          text: 'Already have an account?  ',
+                          style: theme.textTheme.bodyLarge
+                              ?.copyWith(color: AppColors.inkSub),
+                          children: [
+                            TextSpan(
+                              text: 'Log in',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              recognizer: _loginRecognizer,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: isLoading ? null : _onSubmit,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Sign Up'),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

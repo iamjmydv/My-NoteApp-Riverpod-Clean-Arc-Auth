@@ -7,6 +7,7 @@ import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/data/datasour
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/data/repository/profile_repository_impl.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/domain/repository/profile_repository.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/domain/usecases/get_user_profile_usecase.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/domain/usecases/update_profile_usecase.dart';
 
 final profileRemoteDataSourceProvider = Provider<ProfileRemoteDataSource>(
   (ref) => ProfileRemoteDataSourceImpl(firestore: ref.watch(firestoreProvider)),
@@ -18,6 +19,10 @@ final profileRepositoryProvider = Provider<ProfileRepository>(
 
 final getUserProfileUseCaseProvider = Provider<GetUserProfileUseCase>(
   (ref) => GetUserProfileUseCase(ref.watch(profileRepositoryProvider)),
+);
+
+final updateProfileUseCaseProvider = Provider<UpdateProfileUseCase>(
+  (ref) => UpdateProfileUseCase(ref.watch(profileRepositoryProvider)),
 );
 
 /// Fetches the profile for [uid].
