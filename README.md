@@ -1,4 +1,4 @@
-> 🎨 **Figma Design:** [Flutter Noteapp Design](https://www.figma.com/design/hbdnZFLMiGs1HV2GU3rnUX/Flutter-Noteapp-Design?node-id=0-1&p=f&t=1HyQt9Im5frmnVoD-0)
+> 🎨 **Figma Design:** [Flutter Noteapp Design](https://www.figma.com/design/hbdnZFLMiGs1HV2GU3rnUX/Flutter-Noteapp-Design?node-id=0-1&t=ReyllgnMTb5aRDie-1)
 
 # My-NoteApp-Riverpod-Clean-Arc-Auth
 Flutter Notes App built with Clean Architecture and Riverpod for scalable state management. Features Firebase Authentication for login/signup and Cloud Firestore for real-time note syncing. Designed with maintainability, scalability, and clean code practices in mind.
