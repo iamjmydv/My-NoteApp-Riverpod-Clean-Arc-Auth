@@ -7,4 +7,5 @@ abstract final class AppRoutes {
   static const String noteCreate = '/notes/new';
   static const String noteEdit = '/notes/edit';
   static const String userProfile = '/profile';
+  static const String editProfile = '/profile/edit';
 }

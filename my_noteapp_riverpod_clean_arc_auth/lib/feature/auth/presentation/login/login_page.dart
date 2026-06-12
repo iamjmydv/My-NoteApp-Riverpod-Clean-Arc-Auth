@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/resources/strings.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_routes.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/widgets/app_logo.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/domain/usecases/login_user_usecase.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/presentation/login/providers/login_controller.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/presentation/login/providers/login_state.dart';
@@ -85,8 +87,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                backgroundColor: Colors.green.shade600,
-                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.success,
                 content: Row(
                   children: [
                     const Icon(Icons.check_circle, color: Colors.white),
@@ -108,8 +109,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                backgroundColor: Colors.red.shade700,
-                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.error,
                 content: Text(
                   'Login failed: $message',
                   style: const TextStyle(color: Colors.white),
@@ -125,101 +125,130 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final isLoading = state is LoginLoadingState;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
             child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: IntrinsicHeight(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Welcome back',
-                        style: theme.textTheme.headlineSmall,
-                        textAlign: TextAlign.center,
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 8),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: AppLogo(),
+                    ),
+                    const SizedBox(height: 28),
+                    Text('Welcome back', style: theme.textTheme.displaySmall),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Sign in to continue to your notes',
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(color: AppColors.inkSub),
+                    ),
+                    const SizedBox(height: 28),
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      enabled: !isLoading,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        hintText: 'you@example.com',
                       ),
-                      const SizedBox(height: 24),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        enabled: !isLoading,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: _validateEmail,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
-                        enabled: !isLoading,
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
-                            onPressed: isLoading
-                                ? null
-                                : () => setState(
-                                      () =>
-                                          _obscurePassword = !_obscurePassword,
-                                    ),
+                      validator: _validateEmail,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.done,
+                      enabled: !isLoading,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: AppColors.inkSub,
                           ),
-                        ),
-                        validator: _validatePassword,
-                        onFieldSubmitted: (_) => _onSubmit(),
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton(
-                        onPressed: isLoading ? null : _onSubmit,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                          onPressed: isLoading
+                              ? null
+                              : () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
                                   ),
-                                )
-                              : const Text('Login'),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Text.rich(
-                          TextSpan(
-                            text: "Don't have an account? ",
-                            style: theme.textTheme.bodyMedium,
-                            children: [
-                              TextSpan(
-                                text: 'Sign Up',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.primary,
-                                  decoration: TextDecoration.underline,
-                                  fontWeight: FontWeight.w600,
+                      validator: _validatePassword,
+                      onFieldSubmitted: (_) => _onSubmit(),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: isLoading
+                            ? null
+                            : () => ScaffoldMessenger.of(context)
+                              ..hideCurrentSnackBar()
+                              ..showSnackBar(
+                                const SnackBar(
+                                  content: Text('Password reset coming soon.'),
                                 ),
-                                recognizer: _signUpRecognizer,
                               ),
-                            ],
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          'Forgot password?',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: isLoading ? null : _onSubmit,
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Log in'),
+                    ),
+                    const SizedBox(height: 20),
+                    Center(
+                      child: Text.rich(
+                        TextSpan(
+                          text: "Don't have an account?  ",
+                          style: theme.textTheme.bodyLarge
+                              ?.copyWith(color: AppColors.inkSub),
+                          children: [
+                            TextSpan(
+                              text: 'Sign up',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              recognizer: _signUpRecognizer,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

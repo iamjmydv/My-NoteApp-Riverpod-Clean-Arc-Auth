@@ -30,4 +30,12 @@ class UserDetailsModel extends UserDetailsEntity {
     'email': email,
     'createdAt': FieldValue.serverTimestamp()
   };
+
+  // Payload for `update()` — only the editable fields. Leaves email (the auth
+  // identity) and createdAt untouched.
+  Map<String, dynamic> toUpdateMap() => {
+    'firstName': firstName,
+    'lastName': lastName,
+    'age': age,
+  };
 }
