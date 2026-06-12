@@ -32,8 +32,9 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.note?.title ?? '');
-    _contentController =
-        TextEditingController(text: widget.note?.content ?? '');
+    _contentController = TextEditingController(
+      text: widget.note?.content ?? '',
+    );
   }
 
   @override
@@ -56,9 +57,9 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
 
     final user = ref.read(firebaseAuthProvider).currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must be logged in.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('You must be logged in.')));
       return;
     }
 
@@ -94,8 +95,7 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete note?'),
         content: const Text('This action cannot be undone.'),
         actions: [
@@ -126,8 +126,10 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    ref.listen<AsyncValue<NoteEditState>>(noteEditControllerProvider,
-        (prev, next) {
+    ref.listen<AsyncValue<NoteEditState>>(noteEditControllerProvider, (
+      prev,
+      next,
+    ) {
       switch (next.value) {
         case NoteEditSuccessState(:final wasCreated):
           ScaffoldMessenger.of(context)
@@ -176,7 +178,9 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
 
     final state = ref.watch(noteEditControllerProvider).value;
     final isLoading = state is NoteEditLoadingState;
-    final edited = relativeTime(widget.note?.updatedAt ?? widget.note?.createdAt);
+    final edited = relativeTime(
+      widget.note?.updatedAt ?? widget.note?.createdAt,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -195,15 +199,18 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
               style: FilledButton.styleFrom(
                 minimumSize: const Size(72, 40),
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                textStyle: theme.textTheme.titleSmall
-                    ?.copyWith(color: Colors.white),
+                textStyle: theme.textTheme.titleSmall?.copyWith(
+                  color: Colors.white,
+                ),
               ),
               child: isLoading
                   ? const SizedBox(
                       height: 18,
                       width: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : Text(widget.isEditing ? 'Save' : 'Create'),
             ),
@@ -222,7 +229,8 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
                   controller: _titleController,
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.next,
-                  enabled: !isLoading,
+                  readOnly: isLoading,
+                  canRequestFocus: !isLoading,
                   style: theme.textTheme.headlineSmall,
                   maxLines: null,
                   decoration: InputDecoration(
@@ -232,8 +240,9 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     hintText: 'Title',
-                    hintStyle: theme.textTheme.headlineSmall
-                        ?.copyWith(color: AppColors.inkFaint),
+                    hintStyle: theme.textTheme.headlineSmall?.copyWith(
+                      color: AppColors.inkFaint,
+                    ),
                   ),
                   validator: (v) => _validateRequired(v, 'Title'),
                 ),
@@ -247,7 +256,8 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
                 TextFormField(
                   controller: _contentController,
                   textCapitalization: TextCapitalization.sentences,
-                  enabled: !isLoading,
+                  readOnly: isLoading,
+                  canRequestFocus: !isLoading,
                   minLines: 8,
                   maxLines: null,
                   style: theme.textTheme.bodyLarge?.copyWith(height: 1.6),
@@ -258,8 +268,9 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     hintText: 'Start writing…',
-                    hintStyle: theme.textTheme.bodyLarge
-                        ?.copyWith(color: AppColors.inkFaint),
+                    hintStyle: theme.textTheme.bodyLarge?.copyWith(
+                      color: AppColors.inkFaint,
+                    ),
                   ),
                   validator: (v) => _validateRequired(v, 'Content'),
                 ),

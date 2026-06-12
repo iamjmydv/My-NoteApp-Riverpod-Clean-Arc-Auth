@@ -169,9 +169,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     final isLoading = state is SignUpLoadingState;
 
     return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: _goToLogin),
-      ),
+      appBar: AppBar(leading: BackButton(onPressed: _goToLogin)),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -187,8 +185,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                     const SizedBox(height: 6),
                     Text(
                       'Start capturing your ideas',
-                      style: theme.textTheme.bodyLarge
-                          ?.copyWith(color: AppColors.inkSub),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: AppColors.inkSub,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     Row(
@@ -199,9 +198,11 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                             controller: _firstNameController,
                             textCapitalization: TextCapitalization.words,
                             textInputAction: TextInputAction.next,
-                            enabled: !isLoading,
-                            decoration:
-                                const InputDecoration(labelText: 'First name'),
+                            readOnly: isLoading,
+                            canRequestFocus: !isLoading,
+                            decoration: const InputDecoration(
+                              labelText: 'First name',
+                            ),
                             validator: (v) =>
                                 _validateRequired(v, 'First name'),
                           ),
@@ -212,11 +213,12 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                             controller: _lastNameController,
                             textCapitalization: TextCapitalization.words,
                             textInputAction: TextInputAction.next,
-                            enabled: !isLoading,
-                            decoration:
-                                const InputDecoration(labelText: 'Last name'),
-                            validator: (v) =>
-                                _validateRequired(v, 'Last name'),
+                            readOnly: isLoading,
+                            canRequestFocus: !isLoading,
+                            decoration: const InputDecoration(
+                              labelText: 'Last name',
+                            ),
+                            validator: (v) => _validateRequired(v, 'Last name'),
                           ),
                         ),
                       ],
@@ -226,7 +228,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       controller: _ageController,
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.next,
-                      enabled: !isLoading,
+                      readOnly: isLoading,
+                      canRequestFocus: !isLoading,
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                         LengthLimitingTextInputFormatter(3),
@@ -239,7 +242,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
-                      enabled: !isLoading,
+                      readOnly: isLoading,
+                      canRequestFocus: !isLoading,
                       decoration: const InputDecoration(
                         labelText: 'Email',
                         hintText: 'you@example.com',
@@ -251,7 +255,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       textInputAction: TextInputAction.done,
-                      enabled: !isLoading,
+                      readOnly: isLoading,
+                      canRequestFocus: !isLoading,
                       decoration: InputDecoration(
                         labelText: 'Password',
                         hintText: 'at least 6 characters',
@@ -265,8 +270,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                           onPressed: isLoading
                               ? null
                               : () => setState(
-                                    () => _obscurePassword = !_obscurePassword,
-                                  ),
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                         ),
                       ),
                       validator: _validatePassword,
@@ -291,8 +296,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       child: Text.rich(
                         TextSpan(
                           text: 'Already have an account?  ',
-                          style: theme.textTheme.bodyLarge
-                              ?.copyWith(color: AppColors.inkSub),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: AppColors.inkSub,
+                          ),
                           children: [
                             TextSpan(
                               text: 'Log in',

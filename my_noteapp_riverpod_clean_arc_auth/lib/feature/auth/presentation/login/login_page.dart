@@ -146,15 +146,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     const SizedBox(height: 6),
                     Text(
                       'Sign in to continue to your notes',
-                      style: theme.textTheme.bodyLarge
-                          ?.copyWith(color: AppColors.inkSub),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: AppColors.inkSub,
+                      ),
                     ),
                     const SizedBox(height: 28),
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
-                      enabled: !isLoading,
+                      readOnly: isLoading,
+                      canRequestFocus: !isLoading,
                       decoration: const InputDecoration(
                         labelText: 'Email',
                         hintText: 'you@example.com',
@@ -166,7 +168,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       textInputAction: TextInputAction.done,
-                      enabled: !isLoading,
+                      readOnly: isLoading,
+                      canRequestFocus: !isLoading,
                       decoration: InputDecoration(
                         labelText: 'Password',
                         suffixIcon: IconButton(
@@ -179,8 +182,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           onPressed: isLoading
                               ? null
                               : () => setState(
-                                    () => _obscurePassword = !_obscurePassword,
-                                  ),
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                         ),
                       ),
                       validator: _validatePassword,
@@ -193,15 +196,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         onPressed: isLoading
                             ? null
                             : () => ScaffoldMessenger.of(context)
-                              ..hideCurrentSnackBar()
-                              ..showSnackBar(
-                                const SnackBar(
-                                  content: Text('Password reset coming soon.'),
+                                ..hideCurrentSnackBar()
+                                ..showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Password reset coming soon.',
+                                    ),
+                                  ),
                                 ),
-                              ),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 4),
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
@@ -233,8 +240,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       child: Text.rich(
                         TextSpan(
                           text: "Don't have an account?  ",
-                          style: theme.textTheme.bodyLarge
-                              ?.copyWith(color: AppColors.inkSub),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: AppColors.inkSub,
+                          ),
                           children: [
                             TextSpan(
                               text: 'Sign up',

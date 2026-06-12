@@ -69,9 +69,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
     final user = ref.read(firebaseAuthProvider).currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must be logged in.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('You must be logged in.')));
       return;
     }
 
@@ -96,11 +96,15 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final user = ref.watch(firebaseAuthProvider).currentUser;
-    final initials =
-        _initials(_firstNameController.text, _lastNameController.text);
+    final initials = _initials(
+      _firstNameController.text,
+      _lastNameController.text,
+    );
 
-    ref.listen<AsyncValue<EditProfileState>>(editProfileControllerProvider,
-        (prev, next) {
+    ref.listen<AsyncValue<EditProfileState>>(editProfileControllerProvider, (
+      prev,
+      next,
+    ) {
       switch (next.value) {
         case EditProfileSuccessState():
           // Refresh the read-only profile screen so it shows the new values.
@@ -143,10 +147,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     final isLoading = state is EditProfileLoadingState;
 
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: const Text('Edit Profile'),
-      ),
+      appBar: AppBar(centerTitle: true, title: const Text('Edit Profile')),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -165,8 +166,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         backgroundColor: AppColors.primarySoft,
                         child: Text(
                           initials,
-                          style: theme.textTheme.headlineMedium
-                              ?.copyWith(color: AppColors.primary),
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                       Positioned(
@@ -180,8 +182,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
                           ),
-                          child: const Icon(Icons.photo_camera,
-                              color: Colors.white, size: 15),
+                          child: const Icon(
+                            Icons.photo_camera,
+                            color: Colors.white,
+                            size: 15,
+                          ),
                         ),
                       ),
                     ],
@@ -195,7 +200,8 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                 controller: _firstNameController,
                 textCapitalization: TextCapitalization.words,
                 textInputAction: TextInputAction.next,
-                enabled: !isLoading,
+                readOnly: isLoading,
+                canRequestFocus: !isLoading,
                 decoration: const InputDecoration(hintText: 'First name'),
                 validator: (v) => _validateRequired(v, 'First name'),
               ),
@@ -206,7 +212,8 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                 controller: _lastNameController,
                 textCapitalization: TextCapitalization.words,
                 textInputAction: TextInputAction.next,
-                enabled: !isLoading,
+                readOnly: isLoading,
+                canRequestFocus: !isLoading,
                 decoration: const InputDecoration(hintText: 'Last name'),
                 validator: (v) => _validateRequired(v, 'Last name'),
               ),
@@ -217,7 +224,8 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                 controller: _ageController,
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.done,
-                enabled: !isLoading,
+                readOnly: isLoading,
+                canRequestFocus: !isLoading,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(3),
@@ -264,10 +272,9 @@ class _Label extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: Theme.of(context)
-          .textTheme
-          .labelMedium
-          ?.copyWith(color: AppColors.inkSub),
+      style: Theme.of(
+        context,
+      ).textTheme.labelMedium?.copyWith(color: AppColors.inkSub),
     );
   }
 }
