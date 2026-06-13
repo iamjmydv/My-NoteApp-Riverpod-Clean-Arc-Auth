@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/common/common.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/auth_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/profile_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
@@ -69,9 +70,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
     final user = ref.read(firebaseAuthProvider).currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('You must be logged in.')));
+      CommonSnackBar.showInfo(context, 'You must be logged in.');
       return;
     }
 
@@ -85,18 +84,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     await ref.read(editProfileControllerProvider.notifier).submit(params);
   }
 
-  static String _initials(String first, String last) {
-    final f = first.isNotEmpty ? first[0] : '';
-    final l = last.isNotEmpty ? last[0] : '';
-    final combined = '$f$l'.toUpperCase();
-    return combined.isEmpty ? '?' : combined;
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final user = ref.watch(firebaseAuthProvider).currentUser;
-    final initials = _initials(
+    final initials = CommonAvatar.initialsFrom(
       _firstNameController.text,
       _lastNameController.text,
     );
@@ -111,33 +103,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
           if (user != null) {
             ref.invalidate(userProfileProvider(user.uid));
           }
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: Colors.green.shade600,
-                behavior: SnackBarBehavior.floating,
-                content: const Text(
-                  'Profile updated',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            );
+          CommonSnackBar.showSuccess(context, 'Profile updated');
           ref.read(editProfileControllerProvider.notifier).reset();
           if (context.canPop()) context.pop();
         case EditProfileFailedState(:final message):
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: Colors.red.shade700,
-                behavior: SnackBarBehavior.floating,
-                content: Text(
-                  'Update failed: $message',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            );
+          CommonSnackBar.showError(context, 'Update failed: $message');
         case _:
           break;
       }
@@ -161,14 +131,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                   height: 96,
                   child: Stack(
                     children: [
-                      CircleAvatar(
+                      CommonAvatar(
+                        text: initials,
                         radius: 48,
-                        backgroundColor: AppColors.primarySoft,
-                        child: Text(
-                          initials,
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            color: AppColors.primary,
-                          ),
+                        textStyle: theme.textTheme.headlineMedium?.copyWith(
+                          color: AppColors.primary,
                         ),
                       ),
                       Positioned(
@@ -194,34 +161,35 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                 ),
               ),
               const SizedBox(height: 28),
-              _Label('First name'),
+              const CommonLabel('First name'),
               const SizedBox(height: 8),
-              TextFormField(
+              CommonTextField(
                 controller: _firstNameController,
+                hint: 'First name',
                 textCapitalization: TextCapitalization.words,
                 textInputAction: TextInputAction.next,
                 readOnly: isLoading,
                 canRequestFocus: !isLoading,
-                decoration: const InputDecoration(hintText: 'First name'),
                 validator: (v) => _validateRequired(v, 'First name'),
               ),
               const SizedBox(height: 16),
-              _Label('Last name'),
+              const CommonLabel('Last name'),
               const SizedBox(height: 8),
-              TextFormField(
+              CommonTextField(
                 controller: _lastNameController,
+                hint: 'Last name',
                 textCapitalization: TextCapitalization.words,
                 textInputAction: TextInputAction.next,
                 readOnly: isLoading,
                 canRequestFocus: !isLoading,
-                decoration: const InputDecoration(hintText: 'Last name'),
                 validator: (v) => _validateRequired(v, 'Last name'),
               ),
               const SizedBox(height: 16),
-              _Label('Age'),
+              const CommonLabel('Age'),
               const SizedBox(height: 8),
-              TextFormField(
+              CommonTextField(
                 controller: _ageController,
+                hint: 'Age',
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.done,
                 readOnly: isLoading,
@@ -230,51 +198,30 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(3),
                 ],
-                decoration: const InputDecoration(hintText: 'Age'),
                 validator: _validateAge,
                 onFieldSubmitted: (_) => _onSave(),
               ),
               const SizedBox(height: 16),
-              _Label('Email (cannot be changed)'),
+              const CommonLabel('Email (cannot be changed)'),
               const SizedBox(height: 8),
               // Email is the Firebase Auth identity — read-only here. Changing
               // it would require re-authentication, so it's shown for reference.
-              TextFormField(
+              CommonTextField(
                 controller: _emailController,
                 enabled: false,
+                hint: 'you@example.com',
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(hintText: 'you@example.com'),
               ),
               const SizedBox(height: 32),
-              FilledButton(
-                onPressed: isLoading ? null : _onSave,
-                child: isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save Changes'),
+              CommonPrimaryButton(
+                label: 'Save Changes',
+                isLoading: isLoading,
+                onPressed: _onSave,
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-class _Label extends StatelessWidget {
-  final String text;
-  const _Label(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: Theme.of(
-        context,
-      ).textTheme.labelMedium?.copyWith(color: AppColors.inkSub),
     );
   }
 }

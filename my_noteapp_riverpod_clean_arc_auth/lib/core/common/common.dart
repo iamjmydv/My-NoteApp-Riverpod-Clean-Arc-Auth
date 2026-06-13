@@ -15,6 +15,7 @@ export 'common_info_row.dart';
 export 'common_label.dart';
 export 'common_loader.dart';
 export 'common_password_field.dart';
+export 'common_primary_button.dart';
 export 'common_rich_link_text.dart';
 export 'common_search_field.dart';
 export 'common_section_card.dart';

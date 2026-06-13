@@ -1,7 +1,7 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/common/common.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/resources/strings.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_routes.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
@@ -21,22 +21,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _signUpRecognizer = TapGestureRecognizer();
-  bool _obscurePassword = true;
 
   static final _emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$');
-
-  @override
-  void initState() {
-    super.initState();
-    _signUpRecognizer.onTap = _goToSignUp;
-  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _signUpRecognizer.dispose();
     super.dispose();
   }
 
@@ -83,39 +74,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     ref.listen<AsyncValue<LoginState>>(loginControllerProvider, (prev, next) {
       switch (next.value) {
         case LoginSuccessState(:final details):
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: AppColors.success,
-                content: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Welcome back, '
-                        '${details.firstName} ${details.lastName}!',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
+          CommonSnackBar.showSuccess(
+            context,
+            'Welcome back, ${details.firstName} ${details.lastName}!',
+          );
           context.go(AppRoutes.notes);
         case LoginFailedState(:final message):
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: AppColors.error,
-                content: Text(
-                  'Login failed: $message',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            );
+          CommonSnackBar.showError(context, 'Login failed: $message');
         case _:
           break;
       }
@@ -151,41 +116,21 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 28),
-                    TextFormField(
+                    CommonTextField(
                       controller: _emailController,
+                      label: 'Email',
+                      hint: 'you@example.com',
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       readOnly: isLoading,
                       canRequestFocus: !isLoading,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        hintText: 'you@example.com',
-                      ),
                       validator: _validateEmail,
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    CommonPasswordField(
                       controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
                       readOnly: isLoading,
                       canRequestFocus: !isLoading,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: AppColors.inkSub,
-                          ),
-                          onPressed: isLoading
-                              ? null
-                              : () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
-                                ),
-                        ),
-                      ),
                       validator: _validatePassword,
                       onFieldSubmitted: (_) => _onSubmit(),
                     ),
@@ -195,15 +140,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       child: TextButton(
                         onPressed: isLoading
                             ? null
-                            : () => ScaffoldMessenger.of(context)
-                                ..hideCurrentSnackBar()
-                                ..showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Password reset coming soon.',
-                                    ),
-                                  ),
-                                ),
+                            : () => CommonSnackBar.showInfo(
+                                context,
+                                'Password reset coming soon.',
+                              ),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 4,
@@ -222,38 +162,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: isLoading ? null : _onSubmit,
-                      child: isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Log in'),
+                    CommonPrimaryButton(
+                      label: 'Log in',
+                      isLoading: isLoading,
+                      onPressed: _onSubmit,
                     ),
                     const SizedBox(height: 20),
                     Center(
-                      child: Text.rich(
-                        TextSpan(
-                          text: "Don't have an account?  ",
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: AppColors.inkSub,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'Sign up',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              recognizer: _signUpRecognizer,
-                            ),
-                          ],
-                        ),
+                      child: CommonRichLinkText(
+                        text: "Don't have an account?  ",
+                        linkText: 'Sign up',
+                        onTap: _goToSignUp,
                       ),
                     ),
                   ],

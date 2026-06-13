@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/common/common.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/auth_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/profile_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_routes.dart';
@@ -37,14 +38,14 @@ class UserProfilePage extends ConsumerWidget {
             onPressed: profileAsync.value == null
                 ? null
                 : () => context.push(
-                      AppRoutes.editProfile,
-                      extra: profileAsync.value,
-                    ),
+                    AppRoutes.editProfile,
+                    extra: profileAsync.value,
+                  ),
           ),
         ],
       ),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const CommonLoader.page(),
         error: (e, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -69,13 +70,6 @@ class _ProfileBody extends ConsumerWidget {
 
   const _ProfileBody({required this.profile, required this.uid});
 
-  static String _initials(String first, String last) {
-    final f = first.isNotEmpty ? first[0] : '';
-    final l = last.isNotEmpty ? last[0] : '';
-    final combined = '$f$l'.toUpperCase();
-    return combined.isEmpty ? '?' : combined;
-  }
-
   Future<void> _logout(BuildContext context, WidgetRef ref) async {
     await ref.read(firebaseAuthProvider).signOut();
     if (!context.mounted) return;
@@ -90,13 +84,14 @@ class _ProfileBody extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       children: [
         Center(
-          child: CircleAvatar(
+          child: CommonAvatar(
+            text: CommonAvatar.initialsFrom(
+              profile.firstName,
+              profile.lastName,
+            ),
             radius: 48,
-            backgroundColor: AppColors.primarySoft,
-            child: Text(
-              _initials(profile.firstName, profile.lastName),
-              style: theme.textTheme.headlineMedium
-                  ?.copyWith(color: AppColors.primary),
+            textStyle: theme.textTheme.headlineMedium?.copyWith(
+              color: AppColors.primary,
             ),
           ),
         ),
@@ -108,83 +103,40 @@ class _ProfileBody extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Center(
-          child: Text(profile.email, style: theme.textTheme.bodyMedium),
-        ),
+        Center(child: Text(profile.email, style: theme.textTheme.bodyMedium)),
         const SizedBox(height: 28),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
-          ),
+        CommonSectionCard(
           child: Column(
             children: [
-              _InfoRow(label: 'First name', value: profile.firstName),
+              CommonInfoRow(label: 'First name', value: profile.firstName),
               const Divider(height: 1, indent: 16, endIndent: 16),
-              _InfoRow(label: 'Last name', value: profile.lastName),
+              CommonInfoRow(label: 'Last name', value: profile.lastName),
               const Divider(height: 1, indent: 16, endIndent: 16),
-              _InfoRow(label: 'Age', value: profile.age.toString()),
+              CommonInfoRow(label: 'Age', value: profile.age.toString()),
               const Divider(height: 1, indent: 16, endIndent: 16),
-              _InfoRow(label: 'Email', value: profile.email),
+              CommonInfoRow(label: 'Email', value: profile.email),
               const Divider(height: 1, indent: 16, endIndent: 16),
-              _InfoRow(label: 'User ID', value: uid, monospace: true),
+              CommonInfoRow(label: 'User ID', value: uid, monospace: true),
             ],
           ),
         ),
         const SizedBox(height: 28),
         SizedBox(
           height: 52,
-          child: FilledButton(
+          child: CommonPrimaryButton(
+            label: 'Log out',
             onPressed: () => _logout(context, ref),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.errorSoft,
               foregroundColor: AppColors.error,
               elevation: 0,
-              textStyle: theme.textTheme.titleSmall
-                  ?.copyWith(color: AppColors.error),
-            ),
-            child: const Text('Log out'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool monospace;
-
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.monospace = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: theme.textTheme.bodyMedium),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontFamily: monospace ? 'monospace' : null,
-                fontWeight: monospace ? FontWeight.w500 : FontWeight.w600,
+              textStyle: theme.textTheme.titleSmall?.copyWith(
+                color: AppColors.error,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

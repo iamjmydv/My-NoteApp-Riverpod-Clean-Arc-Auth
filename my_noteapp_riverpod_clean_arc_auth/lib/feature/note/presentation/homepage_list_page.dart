@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/common/common.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/auth_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/note_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_routes.dart';
@@ -48,7 +49,7 @@ class _HomepageListPageState extends ConsumerState<HomepageListPage> {
     final notesAsync = ref.watch(notesStreamProvider(user.uid));
     final email = user.email ?? '';
     final accountName = email.contains('@') ? email.split('@').first : 'there';
-    final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
+    final initial = CommonAvatar.initialOf(email);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -61,13 +62,11 @@ class _HomepageListPageState extends ConsumerState<HomepageListPage> {
             child: IconButton(
               tooltip: 'Account',
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-              icon: CircleAvatar(
+              icon: CommonAvatar(
+                text: initial,
                 radius: 18,
-                backgroundColor: AppColors.primarySoft,
-                child: Text(
-                  initial,
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(color: AppColors.primary),
+                textStyle: theme.textTheme.titleSmall?.copyWith(
+                  color: AppColors.primary,
                 ),
               ),
             ),
@@ -96,11 +95,13 @@ class _HomepageListPageState extends ConsumerState<HomepageListPage> {
                       notes.isEmpty
                           ? 'No notes yet'
                           : '${notes.length} '
-                              '${notes.length == 1 ? 'note' : 'notes'}',
+                                '${notes.length == 1 ? 'note' : 'notes'}',
                       style: theme.textTheme.bodyMedium,
                     ),
-                    orElse: () => Text('Hi, $accountName',
-                        style: theme.textTheme.bodyMedium),
+                    orElse: () => Text(
+                      'Hi, $accountName',
+                      style: theme.textTheme.bodyMedium,
+                    ),
                   ),
                 ],
               ),
@@ -108,63 +109,54 @@ class _HomepageListPageState extends ConsumerState<HomepageListPage> {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: TextField(
+              child: CommonSearchField(
                 controller: _searchController,
+                hint: 'Search notes',
                 onChanged: (v) => setState(() => _query = v.trim()),
-                decoration: InputDecoration(
-                  hintText: 'Search notes',
-                  prefixIcon:
-                      const Icon(Icons.search, color: AppColors.inkFaint),
-                  suffixIcon: _query.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close,
-                              color: AppColors.inkFaint),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _query = '');
-                          },
-                        ),
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
+                showClear: _query.isNotEmpty,
+                onClear: () {
+                  _searchController.clear();
+                  setState(() => _query = '');
+                },
               ),
             ),
             const SizedBox(height: 18),
             Expanded(
               child: notesAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const CommonLoader.page(),
                 error: (e, _) => Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text('Failed to load notes: $e',
-                        textAlign: TextAlign.center),
+                    child: Text(
+                      'Failed to load notes: $e',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
                 data: (notes) {
                   final filtered = _query.isEmpty
                       ? notes
                       : notes
-                          .where((n) =>
-                              n.title
-                                  .toLowerCase()
-                                  .contains(_query.toLowerCase()) ||
-                              n.content
-                                  .toLowerCase()
-                                  .contains(_query.toLowerCase()))
-                          .toList();
+                            .where(
+                              (n) =>
+                                  n.title.toLowerCase().contains(
+                                    _query.toLowerCase(),
+                                  ) ||
+                                  n.content.toLowerCase().contains(
+                                    _query.toLowerCase(),
+                                  ),
+                            )
+                            .toList();
 
                   if (notes.isEmpty) {
-                    return const _EmptyState(
+                    return const CommonEmptyState(
                       icon: Icons.sticky_note_2_outlined,
                       title: 'No notes yet',
                       subtitle: 'Tap "New Note" to capture your first idea.',
                     );
                   }
                   if (filtered.isEmpty) {
-                    return const _EmptyState(
+                    return const CommonEmptyState(
                       icon: Icons.search_off,
                       title: 'No matches',
                       subtitle: 'Try a different search term.',
@@ -173,7 +165,7 @@ class _HomepageListPageState extends ConsumerState<HomepageListPage> {
                   return ListView.separated(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 96),
                     itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, i) =>
                         _NoteListCard(note: filtered[i], index: i),
                   );
@@ -246,49 +238,6 @@ class _NoteListCard extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(
-                color: AppColors.primarySoft,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: AppColors.primary, size: 32),
-            ),
-            const SizedBox(height: 16),
-            Text(title, style: theme.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _AppDrawer extends ConsumerWidget {
   final String email;
   final String accountName;
@@ -297,7 +246,7 @@ class _AppDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
+    final initial = CommonAvatar.initialOf(email);
 
     return Drawer(
       width: 300,
@@ -310,20 +259,20 @@ class _AppDrawer extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
+                CommonAvatar(
+                  text: initial,
                   radius: 28,
                   backgroundColor: Colors.white,
-                  child: Text(
-                    initial,
-                    style: theme.textTheme.titleLarge
-                        ?.copyWith(color: AppColors.primary),
+                  textStyle: theme.textTheme.titleLarge?.copyWith(
+                    color: AppColors.primary,
                   ),
                 ),
                 const SizedBox(height: 14),
                 Text(
                   accountName,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(color: Colors.white),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -339,7 +288,7 @@ class _AppDrawer extends ConsumerWidget {
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
-                _DrawerItem(
+                CommonDrawerItem(
                   icon: Icons.person_outline,
                   iconBg: AppColors.primarySoft,
                   iconColor: AppColors.primary,
@@ -352,7 +301,7 @@ class _AppDrawer extends ConsumerWidget {
                   },
                 ),
                 const SizedBox(height: 4),
-                _DrawerItem(
+                CommonDrawerItem(
                   icon: Icons.logout,
                   iconBg: AppColors.errorSoft,
                   iconColor: AppColors.error,
@@ -369,77 +318,6 @@ class _AppDrawer extends ConsumerWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DrawerItem extends StatelessWidget {
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final String title;
-  final String? subtitle;
-  final Color? titleColor;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _DrawerItem({
-    required this.icon,
-    required this.iconBg,
-    required this.iconColor,
-    required this.title,
-    required this.onTap,
-    this.subtitle,
-    this.titleColor,
-    this.active = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: active ? AppColors.surfaceAlt : Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(color: titleColor ?? AppColors.ink),
-                    ),
-                    if (subtitle != null)
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

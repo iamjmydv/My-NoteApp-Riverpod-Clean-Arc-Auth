@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/common/common.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/auth_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/utils/relative_time.dart';
@@ -57,9 +58,7 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
 
     final user = ref.read(firebaseAuthProvider).currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('You must be logged in.')));
+      CommonSnackBar.showInfo(context, 'You must be logged in.');
       return;
     }
 
@@ -92,30 +91,15 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
     final existing = widget.note;
     if (existing == null) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete note?'),
-        content: const Text('This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-              minimumSize: const Size(88, 44),
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await CommonConfirmDialog.show(
+      context,
+      title: 'Delete note?',
+      message: 'This action cannot be undone.',
+      confirmText: 'Delete',
+      isDestructive: true,
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     await ref
         .read(noteEditControllerProvider.notifier)
@@ -132,45 +116,18 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
     ) {
       switch (next.value) {
         case NoteEditSuccessState(:final wasCreated):
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: AppColors.success,
-                content: Text(
-                  wasCreated ? 'Note created' : 'Note updated',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            );
+          CommonSnackBar.showSuccess(
+            context,
+            wasCreated ? 'Note created' : 'Note updated',
+          );
           ref.read(noteEditControllerProvider.notifier).reset();
           if (context.canPop()) context.pop();
         case NoteEditDeletedState():
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: AppColors.error,
-                content: const Text(
-                  'Note deleted',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            );
+          CommonSnackBar.showError(context, 'Note deleted');
           ref.read(noteEditControllerProvider.notifier).reset();
           if (context.canPop()) context.pop();
         case NoteEditFailedState(:final message):
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: AppColors.error,
-                content: Text(
-                  message,
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            );
+          CommonSnackBar.showError(context, message);
         case _:
           break;
       }
@@ -194,8 +151,11 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
-            child: FilledButton(
-              onPressed: isLoading ? null : _onSave,
+            child: CommonPrimaryButton(
+              label: widget.isEditing ? 'Save' : 'Create',
+              isLoading: isLoading,
+              onPressed: _onSave,
+              spinnerSize: 18,
               style: FilledButton.styleFrom(
                 minimumSize: const Size(72, 40),
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -203,16 +163,6 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
                   color: Colors.white,
                 ),
               ),
-              child: isLoading
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(widget.isEditing ? 'Save' : 'Create'),
             ),
           ),
         ],
@@ -225,7 +175,7 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextFormField(
+                CommonTextField(
                   controller: _titleController,
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.next,
@@ -253,7 +203,7 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 8),
-                TextFormField(
+                CommonTextField(
                   controller: _contentController,
                   textCapitalization: TextCapitalization.sentences,
                   readOnly: isLoading,

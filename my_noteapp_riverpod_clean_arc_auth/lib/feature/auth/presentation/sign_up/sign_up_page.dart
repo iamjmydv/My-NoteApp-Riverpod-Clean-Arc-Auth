@@ -1,8 +1,8 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/common/common.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_routes.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/domain/usecases/sign_up_user_usecase.dart';
@@ -23,16 +23,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
   final _ageController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _loginRecognizer = TapGestureRecognizer();
-  bool _obscurePassword = true;
 
   static final _emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$');
-
-  @override
-  void initState() {
-    super.initState();
-    _loginRecognizer.onTap = _goToLogin;
-  }
 
   @override
   void dispose() {
@@ -41,7 +33,6 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     _ageController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _loginRecognizer.dispose();
     super.dispose();
   }
 
@@ -126,40 +117,15 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     ref.listen<AsyncValue<SignUpState>>(signUpControllerProvider, (prev, next) {
       switch (next.value) {
         case SignUpSuccessState(:final details):
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: AppColors.success,
-                content: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Sign up successful! Welcome, '
-                        '${details.firstName} ${details.lastName}.',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
+          CommonSnackBar.showSuccess(
+            context,
+            'Sign up successful! Welcome, '
+            '${details.firstName} ${details.lastName}.',
+          );
           _resetForm();
           context.go(AppRoutes.notes);
         case SignUpFailedState(:final message):
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: AppColors.error,
-                content: Text(
-                  'Sign up failed: $message',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            );
+          CommonSnackBar.showError(context, 'Sign up failed: $message');
         case _:
           break;
       }
@@ -194,38 +160,35 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: TextFormField(
+                          child: CommonTextField(
                             controller: _firstNameController,
+                            label: 'First name',
                             textCapitalization: TextCapitalization.words,
                             textInputAction: TextInputAction.next,
                             readOnly: isLoading,
                             canRequestFocus: !isLoading,
-                            decoration: const InputDecoration(
-                              labelText: 'First name',
-                            ),
                             validator: (v) =>
                                 _validateRequired(v, 'First name'),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: TextFormField(
+                          child: CommonTextField(
                             controller: _lastNameController,
+                            label: 'Last name',
                             textCapitalization: TextCapitalization.words,
                             textInputAction: TextInputAction.next,
                             readOnly: isLoading,
                             canRequestFocus: !isLoading,
-                            decoration: const InputDecoration(
-                              labelText: 'Last name',
-                            ),
                             validator: (v) => _validateRequired(v, 'Last name'),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    CommonTextField(
                       controller: _ageController,
+                      label: 'Age',
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.next,
                       readOnly: isLoading,
@@ -234,82 +197,40 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                         FilteringTextInputFormatter.digitsOnly,
                         LengthLimitingTextInputFormatter(3),
                       ],
-                      decoration: const InputDecoration(labelText: 'Age'),
                       validator: _validateAge,
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    CommonTextField(
                       controller: _emailController,
+                      label: 'Email',
+                      hint: 'you@example.com',
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       readOnly: isLoading,
                       canRequestFocus: !isLoading,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        hintText: 'you@example.com',
-                      ),
                       validator: _validateEmail,
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    CommonPasswordField(
                       controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
+                      hint: 'at least 6 characters',
                       readOnly: isLoading,
                       canRequestFocus: !isLoading,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        hintText: 'at least 6 characters',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: AppColors.inkSub,
-                          ),
-                          onPressed: isLoading
-                              ? null
-                              : () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
-                                ),
-                        ),
-                      ),
                       validator: _validatePassword,
                       onFieldSubmitted: (_) => _onSubmit(),
                     ),
                     const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: isLoading ? null : _onSubmit,
-                      child: isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Create account'),
+                    CommonPrimaryButton(
+                      label: 'Create account',
+                      isLoading: isLoading,
+                      onPressed: _onSubmit,
                     ),
                     const SizedBox(height: 20),
                     Center(
-                      child: Text.rich(
-                        TextSpan(
-                          text: 'Already have an account?  ',
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: AppColors.inkSub,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'Log in',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              recognizer: _loginRecognizer,
-                            ),
-                          ],
-                        ),
+                      child: CommonRichLinkText(
+                        text: 'Already have an account?  ',
+                        linkText: 'Log in',
+                        onTap: _goToLogin,
                       ),
                     ),
                   ],
