@@ -117,7 +117,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     final isLoading = state is EditProfileLoadingState;
 
     return Scaffold(
-      appBar: AppBar(centerTitle: true, title: const Text('Edit Profile')),
+      appBar: AppBar(
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: AppColors.primary),
+        title: const Text('Edit Profile'),
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
