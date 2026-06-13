@@ -2,6 +2,7 @@
 // via Riverpod so any widget can read it with `ref.watch(goRouterProvider)`.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/auth_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_routes.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/presentation/login/login_page.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/auth/presentation/sign_up/sign_up_page.dart';
@@ -13,8 +14,27 @@ import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/presentation/
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/profile/presentation/user_profile_page.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
+  final authLocal = ref.watch(authLocalDataSourceProvider);
+
   return GoRouter(
-    initialLocation: AppRoutes.login,
+    // Launch straight into the notes when a session is remembered, otherwise
+    // start at the login page.
+    initialLocation: authLocal.isLoggedIn()
+        ? AppRoutes.notes
+        : AppRoutes.login,
+    // Guard every navigation against the persisted session flag:
+    //  - signed out users can only reach the login / sign up pages;
+    //  - signed in users are kept out of the login / sign up pages.
+    redirect: (context, state) {
+      final loggedIn = authLocal.isLoggedIn();
+      final location = state.matchedLocation;
+      final onAuthPage =
+          location == AppRoutes.login || location == AppRoutes.signUp;
+
+      if (!loggedIn) return onAuthPage ? null : AppRoutes.login;
+      if (onAuthPage) return AppRoutes.notes;
+      return null;
+    },
     routes: [
       GoRoute(
         path: AppRoutes.login,

@@ -26,19 +26,18 @@ class AppColors {
   static const Color error = Color(0xFFDC2626);
   static const Color errorSoft = Color(0xFFFEE2E2);
 
-  /// Soft pastel fills cycled across note cards.
-  static const List<Color> noteCardPalette = [
-    Color(0xFFFEF3C7), // amber
-    Color(0xFFE0F2FE), // sky
-    Color(0xFFEDE9FE), // lilac
-    Color(0xFFDCFCE7), // mint
-    Color(0xFFFCE7F3), // rose
-    Color(0xFFF8FAFC), // neutral
+  /// (background tint, accent dot) pairs cycled across the note list.
+  static const List<(Color, Color)> noteCardTints = [
+    (Color(0xFFEFF6FF), Color(0xFF3B82F6)), // blue
+    (Color(0xFFFDF2F8), Color(0xFFEC4899)), // pink
+    (Color(0xFFFFFBEB), Color(0xFFF59E0B)), // amber
+    (Color(0xFFF0FDF4), Color(0xFF22C55E)), // green
+    (Color(0xFFF5F3FF), Color(0xFF8B5CF6)), // violet
   ];
 
-  /// Deterministic card color for a note based on its id/index.
-  static Color noteCard(int index) =>
-      noteCardPalette[index % noteCardPalette.length];
+  /// Deterministic (background, accent) tint for a note based on its index.
+  static (Color, Color) noteCardTint(int index) =>
+      noteCardTints[index % noteCardTints.length];
 }
 
 class AppTheme {

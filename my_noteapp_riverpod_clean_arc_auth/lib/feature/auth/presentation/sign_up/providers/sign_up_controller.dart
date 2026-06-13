@@ -14,6 +14,8 @@ class SignUpController extends AsyncNotifier<SignUpState> {
 
     final result = await AsyncValue.guard<SignUpState>(() async {
       final user = await ref.read(signUpUseCaseProvider).call(params);
+      // A successful sign up logs the user in — remember the session.
+      await ref.read(authLocalDataSourceProvider).setLoggedIn(true);
       return SignUpSuccessState(user);
     });
 
