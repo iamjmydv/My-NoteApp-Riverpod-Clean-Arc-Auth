@@ -74,6 +74,7 @@ class _ProfileBody extends ConsumerWidget {
 
   Future<void> _logout(BuildContext context, WidgetRef ref) async {
     await ref.read(firebaseAuthProvider).signOut();
+    await ref.read(authLocalDataSourceProvider).setLoggedIn(false);
     if (!context.mounted) return;
     context.go(AppRoutes.login);
   }

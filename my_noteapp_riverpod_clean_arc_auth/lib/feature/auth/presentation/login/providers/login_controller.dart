@@ -14,6 +14,8 @@ class LoginController extends AsyncNotifier<LoginState> {
 
     final result = await AsyncValue.guard<LoginState>(() async {
       final user = await ref.read(loginUserUseCaseProvider).call(params);
+      // Remember the session so the next launch routes straight to the notes.
+      await ref.read(authLocalDataSourceProvider).setLoggedIn(true);
       return LoginSuccessState(user);
     });
 

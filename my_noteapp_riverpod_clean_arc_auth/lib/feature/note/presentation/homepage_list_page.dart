@@ -8,15 +8,6 @@ import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_routes.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/feature/note/domain/entities/note_entity.dart';
 
-/// (background tint, accent dot) pairs cycled across the note list.
-const List<(Color, Color)> _cardTints = [
-  (Color(0xFFEFF6FF), Color(0xFF3B82F6)), // blue
-  (Color(0xFFFDF2F8), Color(0xFFEC4899)), // pink
-  (Color(0xFFFFFBEB), Color(0xFFF59E0B)), // amber
-  (Color(0xFFF0FDF4), Color(0xFF22C55E)), // green
-  (Color(0xFFF5F3FF), Color(0xFF8B5CF6)), // violet
-];
-
 class HomepageListPage extends ConsumerStatefulWidget {
   const HomepageListPage({super.key});
 
@@ -188,7 +179,7 @@ class _NoteListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (bg, dot) = _cardTints[index % _cardTints.length];
+    final (bg, dot) = AppColors.noteCardTint(index);
 
     return Material(
       color: bg,
@@ -311,6 +302,9 @@ class _AppDrawer extends ConsumerWidget {
                   onTap: () async {
                     Navigator.pop(context);
                     await ref.read(firebaseAuthProvider).signOut();
+                    await ref
+                        .read(authLocalDataSourceProvider)
+                        .setLoggedIn(false);
                     if (!context.mounted) return;
                     context.go(AppRoutes.login);
                   },

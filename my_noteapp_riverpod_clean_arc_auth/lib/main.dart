@@ -1,6 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_noteapp_riverpod_clean_arc_auth/core/providers/auth_providers.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/router/app_router.dart';
 import 'package:my_noteapp_riverpod_clean_arc_auth/core/theme/app_theme.dart';
 
@@ -14,7 +16,16 @@ void main() async {
   // (google-services.json).
   await Firebase.initializeApp();
 
-  runApp(const ProviderScope(child: MyApp()));
+  // Load persisted preferences (e.g. the logged-in flag) up front so the router
+  // can decide the launch screen synchronously.
+  final prefs = await SharedPreferences.getInstance();
+
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends ConsumerWidget {
