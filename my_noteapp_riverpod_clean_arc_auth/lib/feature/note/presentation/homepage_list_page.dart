@@ -55,6 +55,7 @@ class _HomepageListPageState extends ConsumerState<HomepageListPage> {
       key: _scaffoldKey,
       drawer: _AppDrawer(email: email, accountName: accountName),
       appBar: AppBar(
+        iconTheme: const IconThemeData(color: AppColors.primary),
         title: const Text('Homepage List'),
         actions: [
           Padding(

@@ -30,10 +30,12 @@ class UserProfilePage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
+        iconTheme: const IconThemeData(color: AppColors.primary),
         title: const Text('Profile'),
         actions: [
           IconButton(
             tooltip: 'Edit profile',
+            color: AppColors.primary,
             icon: const Icon(Icons.edit_outlined),
             onPressed: profileAsync.value == null
                 ? null
