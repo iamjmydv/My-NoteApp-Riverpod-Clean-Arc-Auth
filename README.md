@@ -146,13 +146,12 @@ Android, iOS, Web, macOS, Windows, and Linux scaffolding are all present.
 
 ## Status & Roadmap
 
-This is primarily a **learning / portfolio project**. A few areas are intentionally
-scaffolded for extension:
+This is primarily a **learning / portfolio project**. The core flows (sign-up, login, notes
+CRUD, profile view/edit) are all implemented. A few areas are intentionally scaffolded for
+extension:
 
-- `login` in the auth remote datasource is currently a stub (`UnimplementedError`) — the
-  contract is wired through the repository and usecase, ready to be filled in with
-  `signInWithEmailAndPassword` plus a Firestore profile read.
 - `UserDetailsModel.fromEntity` exists as a forward-looking hook and has no call sites yet.
+- "Forgot password" is surfaced in the login UI but not yet wired up.
 
 See [LEARNING_NOTES.md](LEARNING_NOTES.md) for the full rationale behind these and other
 design choices.

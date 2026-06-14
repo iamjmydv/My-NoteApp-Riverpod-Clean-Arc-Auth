@@ -1,306 +1,638 @@
-# Learning Notes
+# Learning Notes — A Top-to-Bottom Walkthrough
 
-These are personal study notes captured while building this project. They explain
-the reasoning behind specific Dart/Flutter and Clean Architecture decisions in the
-codebase. They were originally written inline in the README and have been moved here
-so the README can serve as standard project documentation.
+These are study notes for this project, written as a single journey: from the moment the app
+boots, through every screen a user touches, all the way down to Firebase and back. The goal
+is that by reading top to bottom you understand both **what happens** and **why the code is
+shaped this way** (Clean Architecture + Riverpod).
 
-## Firebase Packages
+> These notes describe the code as it actually is. Where something is a deliberate
+> trade-off or an unfinished hook, it's called out explicitly.
 
-### `firebase_core` — the foundation/bootstrap package
-- Initializes the Firebase SDK (`Firebase.initializeApp()`)
-- Manages the connection to your Firebase project (using `firebase_options.dart`)
-- Required by every other Firebase plugin — but it doesn't include any of their features
-- Think of it as the "engine" — it doesn't do auth or database work itself
+---
 
-### `firebase_auth` — authentication only
-- Sign in / sign up (email, Google, Apple, anonymous, phone, etc.)
-- User session management, password reset, email verification
-- `FirebaseAuth.instance`, `User`, `UserCredential` classes
+## Table of contents
 
-### `cloud_firestore` — the NoSQL database only
-- Reading/writing documents and collections
-- Real-time listeners (`snapshots()`)
-- Queries, transactions, batched writes
-- `FirebaseFirestore.instance`, `DocumentSnapshot`, `QuerySnapshot` classes
+1. [The big picture: layers and the dependency rule](#1-the-big-picture-layers-and-the-dependency-rule)
+2. [The repeating layer pattern (every feature looks the same)](#2-the-repeating-layer-pattern-every-feature-looks-the-same)
+3. [Dependency injection: the Riverpod provider graph](#3-dependency-injection-the-riverpod-provider-graph)
+4. [App startup — `main.dart`](#4-app-startup--maindart)
+5. [Routing and the auth guard — `go_router`](#5-routing-and-the-auth-guard--go_router)
+6. [User flow, step by step](#6-user-flow-step-by-step)
+   - [6.1 Sign up](#61-sign-up)
+   - [6.2 Log in](#62-log-in)
+   - [6.3 The notes list (home)](#63-the-notes-list-home)
+   - [6.4 Create a note](#64-create-a-note)
+   - [6.5 Edit / update a note](#65-edit--update-a-note)
+   - [6.6 Delete a note](#66-delete-a-note)
+   - [6.7 View profile](#67-view-profile)
+   - [6.8 Edit profile](#68-edit-profile)
+   - [6.9 Log out](#69-log-out)
+7. [Cross-cutting concepts](#7-cross-cutting-concepts)
+   - [Entity vs Model, and the map payloads](#entity-vs-model-and-the-map-payloads)
+   - [Factory vs generative constructors](#factory-vs-generative-constructors)
+   - [`Failure` — typed errors at the boundary](#failure--typed-errors-at-the-boundary)
+   - [Use cases and params objects](#use-cases-and-params-objects)
+   - [Controllers: `AsyncNotifier` + `AsyncValue.guard` + sealed states](#controllers-asyncnotifier--asyncvalueguard--sealed-states)
+   - [`ref.watch` vs `ref.read` vs `ref.listen`](#refwatch-vs-refread-vs-reflisten)
+8. [The Firestore data model](#8-the-firestore-data-model)
+9. [File-by-file map](#9-file-by-file-map)
 
-### Other Firebase packages might add later (each is separate)
-- `firebase_storage` — file/image uploads
-- `firebase_messaging` — push notifications
-- `cloud_functions` — call backend functions
-- `firebase_analytics`, `firebase_crashlytics`, etc.
+---
 
-Each one is its own dependency — that's the modular pattern Firebase uses.
+## 1. The big picture: layers and the dependency rule
 
-## Regular vs Factory constructor
+The app uses **Clean Architecture**. Every feature is sliced into three layers, and
+dependencies only ever point **inward**, toward the domain:
 
-### Regular (generative) constructor — like the one on line 21
-```dart
-const UserDetailsModel({required super.firstName, ...});
 ```
-- Automatically creates a new instance of the class.
-- You can only assign to `this.field` or call `super(...)`.
-- No `return` statement allowed. Dart does the "new object" part for you.
-
-### Factory constructor — line 35
-```dart
-factory UserDetailsModel.fromMap(Map<String, dynamic>? map) => UserDetailsModel(...);
+        presentation                 data
+   (pages, controllers,        (models, datasources,
+    immutable state)            repository impls)
+            │                          │
+            │   both depend on         │  implements
+            ▼                          ▼
+                       domain
+        (entities, repository interfaces, use cases)
+                 pure Dart — no Flutter, no Firebase
 ```
-- Looks like a constructor from the outside (callers still write `UserDetailsModel.fromMap(json)`), but you control what gets returned.
-- It must explicitly return an instance (here via `=> UserDetailsModel(...)`).
-- It can run logic, transform data, return a cached instance, or even return a subclass — none of which a regular constructor can do.
 
-### Why `fromMap` is a factory
-Look at what happens inside it on lines 36–39:
-```dart
-firstName: map?[Keys.firstName] ?? '',
-age: map?[Keys.age] ?? 0,
+The one rule that makes the whole thing work: **the domain layer imports nothing from
+Flutter or Firebase.** It only knows about plain Dart objects (`UserDetailsEntity`,
+`NoteEntity`), abstract contracts (`AuthRepository`, `NoteRepository`), and the app's own
+error type (`Failure`). Firebase lives exclusively in the data layer's *datasource* files.
+
+Why bother? Because it means:
+- You can swap Firebase for Supabase (or a REST API) by rewriting only the datasources.
+- You can unit-test use cases and controllers with fake repositories — no Firebase boot.
+- Each screen depends on the smallest possible surface, so changes stay local.
+
+The three feature slices are **auth**, **note**, and **profile**. A shared **core** folder
+holds everything cross-cutting: reusable widgets, theme, router, the `Failure` types, and the
+`UseCase` base contracts.
+
+---
+
+## 2. The repeating layer pattern (every feature looks the same)
+
+Once you learn one feature, you've learned them all. Following a single action top to bottom,
+the call passes through these stops:
+
 ```
-It's doing work before constructing:
-- Null-checking the whole map (`map?[...]`).
-- Reading values out by string keys.
-- Falling back to defaults (`?? ''`, `?? 0`) when a field is missing.
+Widget (page)
+  → Controller (AsyncNotifier, holds UI state)
+    → UseCase (one class = one action)
+      → Repository interface  (domain contract)
+        → Repository impl      (data layer, forwards the call)
+          → DataSource         (the ONLY place that touches Firebase)
+            → Firebase Auth / Cloud Firestore
+```
 
-A regular constructor's initializer list can't easily express that kind of "look up, validate, default, then build" flow. The factory wraps that logic and hands back a fully-constructed `UserDetailsModel`.
+On the way back, raw data becomes a **Model**, the model upcasts to an **Entity** at the
+repository seam, and the controller wraps it in an immutable **state** object the widget
+renders. Firebase exceptions are caught in the datasource and converted to **`Failure`s**, so
+nothing above the datasource ever sees a `FirebaseException`.
 
-### Mental model
-Think of it like this:
-- `UserDetailsModel(...)` → "build me one from these exact fields."
-- `UserDetailsModel.fromMap(json)` → "figure out how to build one from this Firestore document."
-- `UserDetailsModel.fromEntity(e)` → "convert this entity into a model."
+Each stop earns its place:
+- **DataSource** — knows Firebase exists; nobody above it does.
+- **Repository** — the seam where you'd later add caching, retries, or merge multiple
+  sources. Right now it's a thin pass-through, and that's fine — keeping the seam means none
+  of that future work needs a refactor.
+- **UseCase** — one executable user intention, so a widget depends only on the action it
+  needs, not the whole repository.
+- **Controller** — turns an action into observable UI state (loading / success / failure).
 
-The `factory` keyword is what lets `fromMap` and `fromEntity` do that conversion/lookup work and still feel like constructors to whoever calls them.
+---
 
-### Why `toMap` isn't a factory
+## 3. Dependency injection: the Riverpod provider graph
 
-`factory` is a **constructor** keyword. `toMap` isn't a constructor.
+Nothing in this app calls `FirebaseAuth.instance` or constructs its own repository inline.
+Instead, every dependency is created by a **Riverpod provider** and passed down by
+constructor. This is the wiring that connects the layers.
 
-Look at what each one returns:
+The auth graph (`core/providers/auth_providers.dart`) reads bottom-up like this:
 
-| Member | Returns | Is it a constructor? |
+```
+sharedPreferencesProvider  (overridden in main)
+        │
+        ├──► authLocalDataSourceProvider ──► AuthLocalDataSourceImpl(prefs)
+        │
+firebaseAuthProvider  ─┐
+firestoreProvider     ─┴──► authRemoteDatasourceProvider ──► AuthRemoteDatasourceImpl(auth, firestore)
+                                     │
+                                     ▼
+                          authRepositoryProvider ──► AuthRepositoryImpl(remote)
+                                     │
+                 ┌───────────────────┴───────────────────┐
+                 ▼                                        ▼
+        signUpUseCaseProvider                    loginUserUseCaseProvider
+```
+
+Key points:
+- `firestoreProvider` and `firebaseAuthProvider` are defined **once** in `auth_providers.dart`
+  and **reused** by `note_providers.dart` and `profile_providers.dart`, so all three features
+  share the same Firestore singleton.
+- `sharedPreferencesProvider` deliberately throws `UnimplementedError` if read directly — it
+  *must* be overridden in `main()` with a real instance (see next section). This lets every
+  other read of prefs be synchronous.
+- The note and profile graphs add two special providers that the UI watches directly:
+  - `notesStreamProvider` — a `StreamProvider.family<List<NoteEntity>, String>` keyed by
+    `userId`. It streams the live notes list.
+  - `userProfileProvider` — a `FutureProvider.family<UserDetailsEntity, String>` keyed by
+    `uid`. It fetches the profile once.
+
+The `.family` modifier is what lets these providers take an argument (the user's id) while
+still being cached per-argument by Riverpod.
+
+---
+
+## 4. App startup — `main.dart`
+
+This is the literal top of the user flow. `main()` is `async` and does four things in order
+before the first frame:
+
+```dart
+WidgetsFlutterBinding.ensureInitialized();      // 1
+await Firebase.initializeApp();                 // 2
+final prefs = await SharedPreferences.getInstance();  // 3
+runApp(
+  ProviderScope(
+    overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],  // 4
+    child: const MyApp(),
+  ),
+);
+```
+
+1. **`ensureInitialized()`** — required whenever `main` does async/plugin work before
+   `runApp`. It boots the Flutter engine binding.
+2. **`Firebase.initializeApp()`** — boots the Firebase SDK using the platform's native config
+   (`google-services.json` on Android, etc.).
+3. **Load `SharedPreferences` up front** — so the router can read the "is logged in?" flag
+   *synchronously* when deciding the first screen. No async gap, no flicker.
+4. **`ProviderScope` with an override** — this is how the real `prefs` instance gets injected
+   into `sharedPreferencesProvider` (which otherwise throws). Everything below this point can
+   read prefs synchronously.
+
+`MyApp` is a `ConsumerWidget`. It watches `goRouterProvider` and hands it to
+`MaterialApp.router`. That single `ref.watch` is what connects navigation to the rest of the
+app.
+
+---
+
+## 5. Routing and the auth guard — `go_router`
+
+Navigation is centralized in `core/router/app_router.dart` and exposed as
+`goRouterProvider`. All path strings live in `app_routes.dart` as constants so a typo can't
+slip into a `context.go(...)` call.
+
+Two pieces enforce the session rules:
+
+**`initialLocation`** — picks the launch screen from the persisted flag:
+```dart
+initialLocation: authLocal.isLoggedIn() ? AppRoutes.notes : AppRoutes.login,
+```
+
+**`redirect`** — runs on *every* navigation and acts as a guard:
+```dart
+redirect: (context, state) {
+  final loggedIn = authLocal.isLoggedIn();
+  final onAuthPage = location == AppRoutes.login || location == AppRoutes.signUp;
+  if (!loggedIn) return onAuthPage ? null : AppRoutes.login;  // signed out → only auth pages
+  if (onAuthPage) return AppRoutes.notes;                     // signed in → kicked off auth pages
+  return null;                                                // otherwise allow
+}
+```
+
+So a signed-out user can never reach `/notes`, and a signed-in user can never go back to
+`/login`. The flag it reads is the same `SharedPreferences` value the controllers set on
+login/sign-up and clear on logout.
+
+The route table also shows how data is passed between screens via `state.extra`:
+- `/notes/edit` receives a `NoteEntity?` (`state.extra as NoteEntity?`).
+- `/profile/edit` receives a `UserDetailsEntity?`.
+
+`extra` carries a real object (not just a string id), which is how the edit pages get
+pre-filled without re-fetching.
+
+---
+
+## 6. User flow, step by step
+
+### 6.1 Sign up
+
+**Screen:** `SignUpPage`. The user fills first name, last name, age, email, password.
+
+**Down the stack:**
+1. The page validates the form, builds a `SignUpUseCaseParams`, and calls
+   `signUpControllerProvider.notifier.submit(params)`.
+2. `SignUpController` (an `AsyncNotifier<SignUpState>`) sets state to `SignUpLoadingState`,
+   then runs the work inside `AsyncValue.guard` (which turns any thrown error into an
+   `AsyncError` instead of crashing):
+   ```dart
+   final user = await ref.read(signUpUseCaseProvider).call(params);
+   await ref.read(authLocalDataSourceProvider).setLoggedIn(true);  // remember session
+   return SignUpSuccessState(user);
+   ```
+3. `SignUpUserUseCase.call` → `AuthRepository.signUp` → `AuthRepositoryImpl` forwards to
+   `AuthRemoteDatasourceImpl.signUp`.
+4. The datasource does the real Firebase work, in order:
+   - `auth.createUserWithEmailAndPassword(...)` → returns a `UserCredential` with the new `uid`.
+   - Builds a `UserDetailsModel` from the form fields (the profile data that *isn't* part of
+     Firebase Auth — first name, last name, age).
+   - `firestore.collection('users').doc(uid).set(profile.toMap())` — writes the profile
+     document keyed by the auth uid. `toMap()` also stamps `createdAt: serverTimestamp()`.
+
+**Back up:** the model returns, upcasts to `UserDetailsEntity` at the repo seam, the
+controller wraps it in `SignUpSuccessState`, and the page (listening via `ref.listen`) shows a
+success snackbar and navigates to `/notes`.
+
+**Why sign-up sets the logged-in flag:** a successful registration is also a login, so the
+guard should let the user straight into the notes.
+
+### 6.2 Log in
+
+**Screen:** `LoginPage`. Email + password, with client-side validation (an email regex and a
+6-char minimum) before anything is sent.
+
+**Down the stack** mirrors sign-up, but the datasource's `login` does a *read* after auth:
+```dart
+final credential = await auth.signInWithEmailAndPassword(email, password);
+final snapshot = await firestore.collection('users').doc(credential.user!.uid).get();
+if (!snapshot.exists) throw const UnknownFailure('Profile not found for this account!');
+return UserDetailsModel.fromMap(snapshot.data()!);   // rehydrate the profile from Firestore
+```
+
+So login both authenticates *and* re-reads the stored profile, rebuilding a
+`UserDetailsModel` from the Firestore document via `fromMap`. On success the controller calls
+`setLoggedIn(true)` and the page navigates to `/notes` with a "Welcome back, …" snackbar.
+
+> Note: `login` is fully implemented (it was a stub in an earlier version of the project).
+
+### 6.3 The notes list (home)
+
+**Screen:** `HomepageListPage` (a `ConsumerStatefulWidget`).
+
+1. It reads the current Firebase user: `ref.watch(firebaseAuthProvider).currentUser`. If
+   that's somehow null, it shows a "must be logged in" message.
+2. It watches the live notes stream for that user:
+   ```dart
+   final notesAsync = ref.watch(notesStreamProvider(user.uid));
+   ```
+   That call walks down: `notesStreamProvider` → `WatchNotesUseCase` → `NoteRepository` →
+   `NoteRemoteDataSourceImpl.watchNotes(userId)`, which returns a Firestore stream:
+   ```dart
+   _notes.where('userId', isEqualTo: userId).snapshots().map(... sort client-side ...)
+   ```
+3. **`notesAsync.when(loading / error / data)`** renders the three UI states:
+   - loading → a page loader,
+   - error → "Failed to load notes",
+   - data → the list (or an empty-state widget if there are no notes).
+4. **Search** is local: a `TextEditingController` updates `_query` via `setState`, and the
+   data branch filters the already-streamed list by title/content. No extra Firestore query.
+5. The **app drawer** shows the account (derived from the email), links to the profile page,
+   and holds the **Logout** action.
+6. The **FAB** pushes `/notes/new` to create a note; tapping a card pushes `/notes/edit` with
+   the `NoteEntity` as `extra`.
+
+**One deliberate design choice — client-side sorting.** `watchNotes` queries by `userId` and
+then sorts by `updatedAt` *in Dart*, newest first. Doing the sort in the query
+(`where(userId) + orderBy(updatedAt)`) would force Firestore to require a composite index.
+Sorting client-side avoids that index for a small per-user list. Pending `serverTimestamp`
+values read as `null` locally, so the sort treats them as "now" (newest) until the server
+stamps them.
+
+### 6.4 Create a note
+
+**Screen:** `NoteEditPage` opened with no note (`/notes/new`).
+
+- The page collects title + content and calls `noteEditControllerProvider.notifier.create(...)`
+  with a `CreateNoteUseCaseParams(userId, title, content)`.
+- `NoteEditController.create` → `CreateNoteUseCase` → repo → `NoteRemoteDataSourceImpl.createNote`:
+  ```dart
+  final draft = NoteModel(id: '', userId, title, content);
+  final ref = await _notes.add(draft.toCreateMap());   // toCreateMap sets created+updated timestamps
+  final saved = await ref.get();
+  return NoteModel.fromDoc(saved);                      // read back with the real id + server times
+  ```
+- On success the controller emits `NoteEditSuccessState(note, wasCreated: true)`. The list,
+  being a live stream, updates on its own — no manual refresh.
+
+### 6.5 Edit / update a note
+
+**Screen:** `NoteEditPage` opened *with* a `NoteEntity` (`/notes/edit`, passed via `extra`),
+so the fields are pre-filled.
+
+- Saving calls `controller.save(UpdateNoteUseCaseParams(id, userId, title, content))` →
+  `UpdateNoteUseCase` → repo → `updateNote`:
+  ```dart
+  await _notes.doc(id).update(draft.toUpdateMap());     // toUpdateMap bumps ONLY updatedAt
+  final saved = await _notes.doc(id).get();
+  return NoteModel.fromDoc(saved);
+  ```
+- `toUpdateMap()` writes just `title`, `content`, and a fresh `updatedAt` — it never touches
+  `createdAt` or `userId`, so the note's history and ownership stay intact.
+- Success → `NoteEditSuccessState(note, wasCreated: false)`.
+
+### 6.6 Delete a note
+
+- From the edit page, delete calls `controller.delete(DeleteNoteUseCaseParams(id))` →
+  `DeleteNoteUseCase` → repo → `deleteNote`, which is just `_notes.doc(id).delete()`.
+- Success → `NoteEditDeletedState`. Again, the live list reflects the removal automatically.
+- Note that `DeleteNoteUseCase` implements `UseCaseWithParams<void, …>` — its result type is
+  `void` because there's nothing to return.
+
+### 6.7 View profile
+
+**Screen:** `UserProfilePage`, reached from the drawer.
+
+- It watches `userProfileProvider(uid)` — a `FutureProvider.family` that runs
+  `GetUserProfileUseCase` → `ProfileRepository.getProfile` →
+  `ProfileRemoteDataSourceImpl.getProfile`:
+  ```dart
+  final snapshot = await firestore.collection('users').doc(uid).get();
+  if (!snapshot.exists) throw const UnknownFailure('Profile not found for this account');
+  return UserDetailsModel.fromMap(snapshot.data()!);
+  ```
+- Because it's a `FutureProvider`, the page again uses `.when(loading/error/data)` to render.
+
+**Reuse across features:** the profile feature does **not** define its own entity — it reuses
+`UserDetailsEntity` from the auth feature. It's the same business object, just read on a
+different screen. Profile only adds its own *datasource/repository/usecases*.
+
+### 6.8 Edit profile
+
+**Screen:** `EditProfilePage`, pre-filled with the `UserDetailsEntity` passed via `extra`.
+
+- Saving calls `editProfileControllerProvider.notifier.submit(UpdateProfileUseCaseParams(uid,
+  firstName, lastName, age))` → `UpdateProfileUseCase` → repo →
+  `ProfileRemoteDataSourceImpl.updateProfile`:
+  ```dart
+  final draft = UserDetailsModel(firstName, lastName, age, email: ''); // email intentionally blank
+  await doc.update(draft.toUpdateMap());   // toUpdateMap writes ONLY firstName/lastName/age
+  final snapshot = await doc.get();
+  return UserDetailsModel.fromMap(snapshot.data()!);
+  ```
+- The `email: ''` is safe because `UserDetailsModel.toUpdateMap()` only emits the three
+  editable fields — it never writes `email` or `createdAt`. So the auth identity and the
+  original creation timestamp are left untouched. This is the profile counterpart to the
+  note's `toUpdateMap()`: update payloads are deliberately narrow.
+- Success → `EditProfileSuccessState(details)`.
+
+### 6.9 Log out
+
+From the drawer's Logout item:
+```dart
+await ref.read(firebaseAuthProvider).signOut();              // end the Firebase session
+await ref.read(authLocalDataSourceProvider).setLoggedIn(false);  // clear the persisted flag
+context.go(AppRoutes.login);                                 // back to login
+```
+Clearing the flag means the router's guard now blocks every non-auth route, completing the
+loop back to the start of the flow.
+
+---
+
+## 7. Cross-cutting concepts
+
+These ideas show up at every layer; collecting them here avoids repeating them per feature.
+
+### Entity vs Model, and the map payloads
+
+- An **Entity** (`UserDetailsEntity`, `NoteEntity`) is pure business data — no Firestore
+  awareness. It lives in the domain.
+- A **Model** (`UserDetailsModel`, `NoteModel`) **extends** its entity and adds the
+  (de)serialisation methods. It lives in the data layer.
+
+Because the model *is-a* entity, a method declared to return the entity can return the model
+and it silently upcasts at the seam. That's why repository **interfaces** return entities
+while the **impls** return models — the richer type collapses to the plain one, and `toMap` /
+`fromMap` stay invisible above the data layer.
+
+There are **three deliberately different map payloads**, because create, update, and read are
+not the same operation:
+
+| Method | Used for | What it writes / reads |
 | --- | --- | --- |
-| `UserDetailsModel(...)` (line 21) | `UserDetailsModel` | yes — generative |
-| `UserDetailsModel.fromMap(map)` (line 35) | `UserDetailsModel` | yes — factory |
-| `UserDetailsModel.fromEntity(e)` (line 28) | `UserDetailsModel` | yes — factory |
-| `toMap()` (line 42) | `Map<String, dynamic>` | no — instance method |
+| `UserDetailsModel.toMap()` | sign-up `set()` | all fields + `createdAt: serverTimestamp()` |
+| `UserDetailsModel.toUpdateMap()` | profile `update()` | only `firstName`, `lastName`, `age` |
+| `NoteModel.toCreateMap()` | note `add()` | all fields + `createdAt` **and** `updatedAt` |
+| `NoteModel.toUpdateMap()` | note `update()` | `title`, `content`, fresh `updatedAt` only |
+| `*.fromMap(map)` / `NoteModel.fromDoc(doc)` | reads | rebuilds a model from Firestore data, with `?? defaults` |
 
-`factory` is a modifier you can only put on a constructor — i.e. something whose job is to produce an instance of the class it lives in. `fromMap` and `fromEntity` both build a `UserDetailsModel`, so they qualify.
+Splitting "create map" from "update map" is what prevents an edit from clobbering
+`createdAt` or `userId`.
 
-`toMap` does the opposite direction: it takes an existing `UserDetailsModel` (`this`) and produces a `Map`. It's not constructing a `UserDetailsModel` at all — it's reading one. That makes it an ordinary instance method.
+> **`UserDetailsModel.fromEntity` is currently dead code.** It exists as a forward-looking
+> hook ("if some code ever holds a bare entity and needs to write it to Firestore, promote it
+> to a model first"), but nothing calls it today — models are always built directly or via
+> `fromMap`. For a learning/portfolio project it's fine to keep as a documented hook; a strict
+> linter would flag it as unused.
 
-#### The naming convention that trips people up
+### Factory vs generative constructors
 
-In Dart you'll often see this pairing:
+The models use both kinds of constructor, and the difference is the reason:
 
-```dart
-Foo.fromX(...)   // constructor — builds a Foo from an X
-foo.toX()        // method      — converts this Foo into an X
-```
+- A **generative** constructor (`UserDetailsModel({required ...})`) just assigns fields. Dart
+  creates the instance for you; no `return`, no logic.
+- A **factory** constructor (`UserDetailsModel.fromMap(...)`, `NoteModel.fromDoc(...)`) looks
+  like a constructor to callers but runs logic first — null-checking the map, reading values
+  by key, applying `?? ''` / `?? 0` defaults, converting `Timestamp` → `DateTime` — and then
+  returns a fully-built instance. A generative constructor's initializer list can't express
+  that "look up, validate, default, then build" flow; a factory can.
 
-The `from*` / `to*` symmetry makes them look like a matched set, but they're structurally different:
-- `from*` lives on the **class** (you call it as `UserDetailsModel.fromMap(...)`). It needs a constructor — and since it does lookup/defaulting work, that constructor is a factory.
-- `to*` lives on an **instance** (you call it as `model.toMap()`). It's just a method.
+Quick test for whether something *could* be `factory`: "does it return an instance of the
+class it's declared in?" `fromMap` returns a `UserDetailsModel` → yes, it's a constructor and
+can be `factory`. `toMap()` returns a `Map` → no, it's an ordinary instance method, and
+`factory` wouldn't even compile there. That's also why the Dart naming convention pairs
+`Foo.fromX()` (a constructor on the class) with `foo.toX()` (a method on an instance).
 
-#### Quick test you can apply
+### `Failure` — typed errors at the boundary
 
-Ask: "is the thing being returned an instance of the class this member is declared in?"
-- **Yes** → it's a constructor → it can be `factory` (if it needs logic) or generative (if it just assigns fields).
-- **No** → it's a method → `factory` doesn't apply, and putting it there would be a compile error.
-
-`toMap` returns a `Map`, not a `UserDetailsModel`, so `factory` is not even an option.
-
-## `fromEntity` — converting Entity → Model
-
-`fromEntity` converts a domain `UserDetailsEntity` into a data-layer `UserDetailsModel` — i.e. it "upgrades" a plain entity into the richer model that knows how to talk to Firestore.
-
-### Class hierarchy
-- `user_details_entity.dart` — pure Dart, no Firestore awareness.
-- `user_details_model.dart` — extends `UserDetailsEntity` and adds `toMap` / `fromMap`.
-
-If some code in the domain or presentation layer only has a `UserDetailsEntity` in hand and needs to write it to Firestore, it can't call `toMap()` on the entity (the entity doesn't have that method). So you'd promote it first:
-
-```dart
-final entity = UserDetailsEntity(firstName: 'Jam', lastName: 'D', age: 25, email: 'a@b.com');
-final model  = UserDetailsModel.fromEntity(entity); // now has toMap()
-await firestore.collection('users').doc(uid).set(model.toMap());
-```
-
-That's the intended use case.
-
-### Where it's actually used
-Nowhere — currently. It was written defensively for "in case the data layer ever receives a bare entity," but in the current flow the model is always built directly via `UserDetailsModel(...)` (in `auth_remote_datasource.dart`) or via `fromMap` when reading from Firestore — never via `fromEntity`.
-
-### What to do with it
-Two reasonable options:
-1. **Delete it.** It's currently dead code. If a future need appears, you can add it back in two lines.
-2. **Keep it as a hook.** It's cheap to have, and the moment the domain layer needs to push an entity into Firestore (e.g. an "update profile" flow that starts from an entity), it'll save you writing the conversion inline.
-
-For a learning/portfolio project, keeping it is fine — the comment at the top of the file already documents its purpose. For a strict codebase, it'd get flagged as unused.
-
-## `AuthRemoteDatasource` — the data-layer Firebase gateway
-
-This is the only place in the app that talks directly to `FirebaseAuth` and `FirebaseFirestore`. Everything above it (repository → usecase → presentation) goes through the abstract `AuthRemoteDatasource` interface and never imports the Firebase SDKs.
-
-### Abstract interface vs implementation
-- `AuthRemoteDatasource` abstract class: declares `signUp` and `login`, both returning `Future<UserDetailsModel>`.
-- `AuthRemoteDatasourceImpl`: holds `FirebaseAuth` and `FirebaseFirestore` (both injected via constructor) and implements the contract.
-
-Why split them? So the repository can depend on the **interface**, and tests can swap in a fake implementation without booting Firebase.
-
-### Constructor injection
-```dart
-AuthRemoteDatasourceImpl({
-  required this.auth,
-  required this.firestore,
-});
-```
-- `auth` and `firestore` come from outside (Riverpod providers).
-- The class doesn't call `FirebaseAuth.instance` or `FirebaseFirestore.instance` itself — that would hard-wire it to the global singletons and make it untestable.
-
-### `signUp` flow
-The implementation does three things in order:
-
-1. **Create the auth user** — `auth.createUserWithEmailAndPassword(...)` returns a `UserCredential` containing the new `uid`.
-2. **Build the profile model** — `UserDetailsModel(...)` (generative constructor) wraps the fields that don't live in Firebase Auth (firstName, lastName, age).
-3. **Persist the profile** — `firestore.collection('users').doc(uid).set(profile.toMap())` writes the model as a document keyed by the auth uid.
-
-This is exactly where `toMap()` earns its keep — Firestore's `.set(...)` takes a `Map<String, dynamic>`, not a `UserDetailsModel`.
-
-### Why the collection name is a private field
-```dart
-final String _collection = 'users';
-```
-- `_` makes it library-private (no leak to consumers).
-- `final` so it can't be reassigned.
-- Centralizing the string here means a rename never gets out of sync between `signUp` and a future `login` / `getProfile`.
-
-### Error handling — three layers, narrow → wide
-
-| Catch | Source | Wrapped as |
-| --- | --- | --- |
-| `on FirebaseAuthException` | Auth SDK (bad password, email in use, etc.) | `ServerFailure(_authErrorMessage(e))` |
-| `on FirebaseException` | Firestore SDK (permission denied, offline, etc.) | `ServerFailure(e.message ?? 'Firestore error (${e.code})')` |
-| `catch (e)` | Anything else (programmer error, plugin bug) | `UnknownFailure(e.toString())` |
-
-Order matters: `FirebaseAuthException` extends `FirebaseException`, so the narrower auth catch **must** come first or every auth error would be swallowed by the generic Firestore branch.
-
-All three branches convert raw SDK exceptions into the project's own `Failure` types (defined in `core/error/failure.dart`). The repository above never sees a `FirebaseAuthException` — it only sees `Failure`s, which keeps Firebase out of the domain layer.
-
-### `_authErrorMessage` — translating codes to UI copy
-A switch on `e.code` returns a human-friendly string. Two things worth noting:
-
-- **`user-not-found` and `wrong-password` collapse to the same message** ("Incorrect email or password"). That's deliberate — telling the user *which* of the two was wrong leaks account-existence info to attackers.
-- **Default branch falls back to `e.message`** rather than a generic string, so unmapped codes still surface something useful while still including the code.
-
-### `login` — currently a stub
-`login` throws `UnimplementedError()`. The signature is in place so the repository and usecase can already wire it up; the body just needs to be filled in (probably `signInWithEmailAndPassword` + a Firestore read to rehydrate the profile).
-
-### Mental model
-- `AuthRemoteDatasource` = "the thin layer that knows Firebase exists."
-- Above it: pure Dart, no SDK imports, only `UserDetailsModel` / `UserDetailsEntity` / `Failure`.
-- Below it: the Firebase plugins.
-
-If you ever swap Firebase for Supabase, this is the file that gets rewritten — and nothing else has to change.
-
-## `AuthRepository` — the domain ↔ data seam
-
-The repository sits between the **usecases** (domain) and the **datasource** (data). The domain declares the contract; the data layer implements it. Anyone above this line talks to `AuthRepository`; nothing above it knows an `AuthRemoteDatasource` exists.
-
-### The interface — domain side
-- Abstract `AuthRepository`. Pure Dart, returns `UserDetailsEntity`, not `UserDetailsModel`. The domain has no awareness that a "model" type exists.
-
-### The implementation — data side
-- `AuthRepositoryImpl extends AuthRepository`. Holds an `AuthRemoteDatasource` (injected) and forwards calls one-to-one.
-
-Notice the return types:
-```dart
-// interface (domain)   Future<UserDetailsEntity>
-// impl     (data)      Future<UserDetailsModel>
-```
-The impl returns the richer `UserDetailsModel`, which silently upcasts to `UserDetailsEntity` at the seam because `UserDetailsModel extends UserDetailsEntity`. Callers see only the entity — `toMap()` / `fromMap()` stay invisible to anything above this line.
-
-### Why a thin pass-through?
-Right now `signUp` and `login` just call straight through to the datasource. It looks redundant. The repository earns its keep the moment you need to:
-- combine multiple sources (remote + local cache),
-- merge or transform failures,
-- add retry / throttle / timeout policy,
-- gate features behind a remote-config flag.
-
-That logic belongs **here** — not in the datasource (too low) and not in the usecase (too high). Keeping the seam in place even when it does nothing means none of that work needs a refactor when it finally arrives.
-
-## Use cases — one class per action
-
-A usecase is a single executable user intention (sign up, log in, fetch profile, …). Each one is its own class, holding only the repository it needs and exposing a single `call(...)` method.
-
-### The base contracts — `core/usecase/usecase.dart`
-```dart
-abstract class UseCaseWithParams<T, P> { Future<T> call(P params); }
-abstract class UseCase<T>              { Future<T> call(); }
-class NoParams { const NoParams(); }
-```
-- `UseCase<T>` — for parameter-less actions (e.g. a future `LogoutUseCase`).
-- `UseCaseWithParams<T, P>` — everything else; `P` is the params object.
-- `NoParams` — sentinel for the rare case you want `UseCaseWithParams` semantics without real params.
-
-The base class is intentionally minimal. It doesn't try to enforce error handling, logging, or transactions — that would force every usecase to opt into a framework. Subclasses do whatever they need inside `call`.
-
-### `SignUpUserUseCase`
-- `SignUpUseCaseParams` (firstName, lastName, age, email, password).
-- `SignUpUserUseCase implements UseCaseWithParams<UserDetailsEntity, SignUpUseCaseParams>`.
-- `call(params)` → `repository.signUp(params)`.
-
-### `LoginUserUseCase`
-- `LoginUseCaseParams` (email, password).
-- `LoginUserUseCase implements UseCaseWithParams<UserDetailsEntity, LoginUseCaseParams>`.
-- `call(params)` → `repository.login(params)`.
-
-### Why one class per action?
-A repository can grow to a dozen methods. A presentation widget that only needs `signUp` shouldn't have to depend on the entire repository surface — it depends on `SignUpUserUseCase`, gets only what it needs, and is trivial to fake in a widget test.
-
-It also gives every action a natural home for cross-cutting work: input validation, analytics, throttling — attach it to the usecase and the rest of the stack stays clean.
-
-### Params objects vs positional arguments
-`SignUpUseCaseParams` exists instead of `call(firstName, lastName, age, email, password)` for two reasons:
-- **Named, type-safe arguments** — at the call site you write `SignUpUseCaseParams(email: ..., password: ...)`, not a five-positional-string call where any two strings could be swapped without the compiler noticing.
-- **Stable signature** — adding a new field (e.g. `referralCode`) is a non-breaking change to `call`; only the params constructor grows.
-
-## `Failure` — typed errors at the layer boundary
-
-`core/error/failure.dart` defines the only error type that crosses layers:
+`core/error/failure.dart` defines the only error type allowed to cross layers:
 
 ```dart
 sealed class Failure implements Exception {
   final String message;
   const Failure(this.message);
+  @override String toString() => message;
+}
+class ServerFailure  extends Failure { ... }  // backend responded with an error
+class NetworkFailure extends Failure { ... }  // request never made it (offline/timeout)
+class UnknownFailure extends Failure { ... }  // anything else; payload is for the developer
+```
+
+- **`sealed`** means the compiler knows every subtype, so a `switch (failure)` in the UI is
+  *exhaustive* — add a fourth subtype and Dart warns at every unhandled `switch`. No package
+  can sneak in a subtype the UI silently ignores.
+- **`implements Exception`** lets the datasource `throw` a `Failure` directly instead of
+  needing a separate translator.
+
+Every datasource follows the same **narrow → wide** catch order:
+
+```dart
+on FirebaseAuthException catch (e) { throw ServerFailure(_authErrorMessage(e)); }  // narrowest
+on FirebaseException     catch (e) { throw ServerFailure(e.message ?? '...'); }     // wider
+on Failure { rethrow; }                  // already ours — don't re-wrap
+catch (e) { throw UnknownFailure(e.toString()); }                                   // widest
+```
+
+Order matters: `FirebaseAuthException` *extends* `FirebaseException`, so the auth catch must
+come first or auth errors would be swallowed by the generic branch. The `on Failure { rethrow; }`
+line matters too — when the datasource itself throws a `Failure` (e.g. "Profile not found"),
+this prevents the final `catch (e)` from re-wrapping it as `UnknownFailure`.
+
+`_authErrorMessage` maps Firebase auth codes to user copy, and **deliberately collapses
+`user-not-found` + `wrong-password` + `invalid-credential` into one message** ("Incorrect
+email or password") so the app doesn't leak which accounts exist.
+
+The end result: everything above the datasource sees only `Failure`. Firebase types never
+reach the domain or presentation layers.
+
+### Use cases and params objects
+
+`core/usecase/usecase.dart` defines two tiny base contracts:
+```dart
+abstract class UseCaseWithParams<T, P> { Future<T> call(P params); }
+abstract class UseCase<T>              { Future<T> call(); }
+class NoParams { const NoParams(); }
+```
+Most actions are `UseCaseWithParams`. The base is intentionally minimal — it doesn't force
+logging or error policy on subclasses.
+
+Two things worth noticing:
+- **Params objects** (`SignUpUseCaseParams`, `CreateNoteUseCaseParams`, …) exist instead of
+  long positional argument lists. They give named, type-safe call sites (you can't silently
+  swap two `String`s) and a stable signature (adding a field doesn't break `call`).
+- **`WatchNotesUseCase` does *not* extend `UseCaseWithParams`.** Its `call` returns a
+  `Stream`, not a `Future`, because Firestore *pushes* updates continuously. The base contract
+  is future-shaped, so the streaming use case is its own plain class with a matching `call`.
+
+### Controllers: `AsyncNotifier` + `AsyncValue.guard` + sealed states
+
+Every screen controller follows the same template (login, sign-up, note-edit, edit-profile):
+
+```dart
+class XController extends AsyncNotifier<XState> {
+  @override FutureOr<XState> build() => const XInitialState();
+
+  Future<void> action(Params p) async {
+    state = const AsyncValue.data(XLoadingState());
+    final result = await AsyncValue.guard<XState>(() async {
+      final value = await ref.read(someUseCaseProvider).call(p);
+      return XSuccessState(value);
+    });
+    state = result.when(
+      data: AsyncValue.data,
+      loading: () => const AsyncValue.data(XLoadingState()),
+      error: (e, _) => AsyncValue.data(XFailedState(e.toString())),
+    );
+  }
+  void reset() => state = const AsyncValue.data(XInitialState());
 }
 
-class ServerFailure  extends Failure { ... }
-class NetworkFailure extends Failure { ... }
-class UnknownFailure extends Failure { ... }
+final xControllerProvider =
+    AsyncNotifierProvider.autoDispose<XController, XState>(XController.new);
 ```
 
-### Why `sealed`?
-A `sealed` class can only be extended within the same library. The compiler then knows every possible subtype, which means:
-- A `switch (failure)` in the presentation layer becomes **exhaustive** — Dart warns if a new `Failure` subtype is added without a matching case.
-- No third-party package can sneak in a fourth `Failure` subclass that the UI silently ignores.
+- The UI state is a **sealed** class with `Initial / Loading / Success / Failed` variants (the
+  note controller adds a `Deleted` variant). Sealed → the page's `switch` over states is
+  exhaustive.
+- **`AsyncValue.guard`** runs the async work and converts any thrown `Failure` into an
+  `AsyncError` instead of an uncaught exception. The controller then maps that error into a
+  `…FailedState(message)` the UI can show.
+- **`.autoDispose`** means the controller is torn down when no widget is listening, so a
+  half-finished login state doesn't linger after you leave the screen.
 
-### Why it `implements Exception`
-So the datasource can `throw` a `Failure` directly instead of needing a separate exception-to-failure translator. The `try/catch` in the datasource already does the work — it converts every raw SDK error into one of the three `Failure` subtypes before re-throwing.
+### `ref.watch` vs `ref.read` vs `ref.listen`
 
-### How it flows through the stack
+These three appear throughout the presentation layer and mean different things:
+- **`ref.watch(provider)`** — subscribe and rebuild when it changes. Used for data the UI
+  renders: `ref.watch(notesStreamProvider(uid))`, `ref.watch(goRouterProvider)`.
+- **`ref.read(provider)`** — read once, no subscription. Used inside callbacks/handlers where
+  you just want to fire an action: `ref.read(loginControllerProvider.notifier).submit(...)`.
+- **`ref.listen(provider, (prev, next) {...})`** — run a side effect on change without
+  rebuilding. Used for one-off reactions like showing a snackbar and navigating when login
+  succeeds or fails.
+
+---
+
+## 8. The Firestore data model
+
+Two top-level collections:
+
 ```
-FirebaseAuthException ─┐
-FirebaseException     ─┼─→ Failure ─→ Failure ─→ Failure ─→ catch & render
-other Exception       ─┘   (data)     (repo)     (usecase)    (presentation)
-       ↑
-   raw SDK errors die here, in the datasource
+users/{uid}                      ← document id IS the Firebase Auth uid
+   firstName : string
+   lastName  : string
+   age       : number
+   email     : string
+   createdAt : serverTimestamp   (set on sign-up, never overwritten)
+
+notes/{autoId}                   ← document id is Firestore-generated
+   userId    : string            (the owner's uid; queried with where('userId', ==))
+   title     : string
+   content   : string
+   createdAt : serverTimestamp   (set on create)
+   updatedAt : serverTimestamp   (set on create, bumped on every update)
 ```
 
-Everything above the datasource sees `Failure` — never `FirebaseAuthException`. That's what keeps the Firebase SDKs out of the domain layer.
+Notes are filtered per user with `where('userId', isEqualTo: uid)` and sorted by `updatedAt`
+client-side (see [6.3](#63-the-notes-list-home)).
 
-### Why three subtypes (and not more)
-- `ServerFailure` — the backend responded with an error (auth rejected the credentials, Firestore returned a permission error).
-- `NetworkFailure` — the request never made it (offline, DNS, timeout). Reserved for connectivity-class errors so the UI can offer a retry instead of an "incorrect password"-style message.
-- `UnknownFailure` — escape hatch for anything else; the `e.toString()` payload is for the developer, not the user.
+---
 
-Keep the set small. The point of a sealed type is exhaustive handling — every new subtype is a new `case` in every `switch` across the presentation layer.
+## 9. File-by-file map
+
+```
+core/
+  error/failure.dart            Sealed Failure + ServerFailure/NetworkFailure/UnknownFailure
+  usecase/usecase.dart          UseCase / UseCaseWithParams / NoParams base contracts
+  providers/auth_providers.dart Defines the shared firebaseAuth + firestore providers, auth DI
+  providers/note_providers.dart Note DI + notesStreamProvider (StreamProvider.family)
+  providers/profile_providers.dart Profile DI + userProfileProvider (FutureProvider.family)
+  router/app_router.dart        goRouterProvider, initialLocation, redirect guard
+  router/app_routes.dart        All path string constants
+  common/                       Reusable widgets (buttons, fields, dialogs, loaders, avatar…)
+  theme/, widgets/, resources/, utils/   Theme, app logo, strings/keys, helpers
+
+feature/auth/
+  domain/entities/user_details_entity.dart   Plain user object (reused by profile)
+  domain/repository/auth_repository.dart      signUp / login contract
+  domain/usecases/{sign_up,login}_user_usecase.dart  + their params objects
+  data/model/user_details_model.dart          toMap / toUpdateMap / fromMap / fromEntity
+  data/datasources/auth_local_datasource.dart  SharedPreferences "is logged in" flag
+  data/datasources/auth_remote_datasource.dart The only auth file touching Firebase
+  data/repository/auth_repository_impl.dart    Forwards to the datasource
+  presentation/login/…                         LoginPage + controller + sealed state
+  presentation/sign_up/…                       SignUpPage + controller + sealed state
+
+feature/note/
+  domain/entities/note_entity.dart             Plain note + copyWith; nullable timestamps
+  domain/repository/note_repository.dart        watch/create/update/delete contract
+  domain/usecases/{watch,create,update,delete}_note_usecase.dart
+  data/model/note_model.dart                    fromDoc / toCreateMap / toUpdateMap
+  data/datasources/note_remote_datasource.dart  Firestore queries + client-side sort
+  data/repository/note_repository_impl.dart     Forwards to the datasource
+  presentation/homepage_list_page.dart          Notes list, search, drawer, logout, FAB
+  presentation/note_edit_page.dart              Create/edit/delete screen
+  presentation/providers/note_edit_*            Controller + sealed state (adds Deleted)
+
+feature/profile/
+  domain/repository/profile_repository.dart     getProfile / updateProfile contract
+  domain/usecases/{get_user_profile,update_profile}_usecase.dart
+  data/datasources/profile_remote_datasource.dart  Reads/updates users/{uid}
+  data/repository/profile_repository_impl.dart     Forwards to the datasource
+  presentation/user_profile_page.dart           Read-only profile view
+  presentation/edit_profile_page.dart           Edit screen
+  presentation/providers/edit_profile_*         Controller + sealed state
+
+main.dart                                       Boot: binding → Firebase → prefs → ProviderScope
+```
+
+---
+
+### One-line summary of the whole flow
+
+> **`main` boots Firebase + prefs → the router reads the persisted flag to pick login or
+> notes → a page calls a controller → the controller runs a use case → the use case calls a
+> repository → the repository forwards to a datasource → the datasource talks to Firebase and
+> converts any error to a `Failure` → data comes back as a Model, upcasts to an Entity, and
+> the controller wraps it in a sealed state the page renders.**
